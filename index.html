@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="ブラウザ内のWeb Workerで動作するMicroPythonコードエディタとREPL"
+      data-i18n-content="meta.description"
+    />
+    <title>MicroPython Web Lab</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">M19 · Editor tabs &amp; device samples</p>
+          <h1>MicroPython Web Lab</h1>
+          <p class="lede" data-i18n="hero.description">
+            MicroPythonのコードをブラウザ内の専用Workerで編集・実行できる実験環境です。
+          </p>
+        </div>
+        <div class="hero-actions">
+          <label class="language-selector" for="language-select">
+            <span data-i18n="language.label">表示言語</span>
+            <select id="language-select">
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <div class="runtime-card" aria-live="polite">
+            <span id="status-indicator" class="status-dot" data-status="starting"></span>
+            <div>
+              <span id="runtime-status" data-i18n="runtime.starting">起動中</span>
+              <small id="runtime-version" data-i18n="runtime.loading">MicroPythonを読み込んでいます</small>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <aside id="local-device-banner" class="local-device-banner" hidden aria-live="polite">
+        <strong data-i18n="local.banner">ローカル開発モード · 未承認デバイス</strong>
+        <span id="local-device-name"></span>
+      </aside>
+
+      <section id="workspace" class="workspace" aria-label="MicroPython REPL">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <button id="restart-button" type="button" data-i18n="toolbar.restart">再起動</button>
+            <button id="stop-button" class="danger" type="button" data-i18n="toolbar.stop">停止</button>
+            <button id="clear-button" class="quiet" type="button" data-i18n="toolbar.clear">出力を消去</button>
+          </div>
+          <span class="hint" data-i18n="toolbar.recoveryHint">Workerが応答しなくても「停止」で破棄できます</span>
+        </div>
+
+        <form id="script-form" class="editor-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Script</p>
+              <label id="code-editor-label" for="code-editor" data-i18n="editor.label">コードエディタ</label>
+            </div>
+            <span data-i18n="editor.shortcut">Tab／Shift+Tabでインデント · ⌘/Ctrl + Enterで実行</span>
+          </div>
+          <div
+            id="editor-tabs"
+            class="editor-tabs"
+            role="tablist"
+            data-i18n-aria-label="editor.tabsLabel"
+            aria-label="コードエディタのタブ"
+          ></div>
+          <div id="editor-debug-workspace" class="editor-debug-workspace">
+            <div id="editor-code-area" class="editor-code-area">
+              <div id="debug-current-line" class="debug-current-line" aria-hidden="true" hidden></div>
+              <textarea
+                id="code-editor"
+                rows="10"
+                wrap="off"
+                spellcheck="false"
+                aria-labelledby="code-editor-label"
+                aria-describedby="debugger-location"
+              >print("Script start")
+for number in range(3):
+    print(number)
+print("Script end")</textarea
+              >
+            </div>
+            <aside
+              id="debug-variable-panel"
+              class="debug-variable-panel"
+              aria-labelledby="debug-variable-title"
+              hidden
+            >
+              <div class="debug-variable-heading">
+                <h3 id="debug-variable-title" data-i18n="debugger.globalsTitle">グローバル変数</h3>
+                <span id="debugger-location" aria-live="polite"></span>
+              </div>
+              <div id="debug-variable-list" class="debug-variable-list" role="list">
+                <p data-i18n="debugger.noGlobals">表示できるグローバル変数はありません</p>
+              </div>
+            </aside>
+          </div>
+          <div class="draft-toolbar">
+            <span id="draft-status" data-state="idle" aria-live="polite" data-i18n="draft.checking">保存状態を確認しています</span>
+            <div class="draft-actions">
+              <button id="save-draft-button" class="quiet" type="button" data-i18n="draft.save">このブラウザに保存</button>
+              <button id="reset-draft-button" class="danger-outline" type="button" data-i18n="draft.reset">
+                初期サンプルに戻す
+              </button>
+            </div>
+          </div>
+          <div class="editor-actions">
+            <span data-i18n="editor.limit">実動時間は最大10秒・出力100,000文字です</span>
+            <div class="editor-run-actions">
+              <button id="debug-script-button" class="quiet" type="button" disabled data-i18n="editor.debug">
+                デバッグ実行
+              </button>
+              <button id="run-script-button" type="submit" disabled data-i18n="editor.run">スクリプトを実行</button>
+            </div>
+          </div>
+        </form>
+
+        <div
+          id="workspace-row-resizer"
+          class="workspace-resizer workspace-row-resizer"
+          role="separator"
+          tabindex="0"
+          aria-orientation="horizontal"
+          aria-valuemin="45"
+          aria-valuemax="85"
+          aria-valuenow="75"
+          aria-label="コードエディタとREPLの高さを変更"
+          data-i18n-aria-label="layout.rowResize"
+        ></div>
+
+        <div
+          id="workspace-column-resizer"
+          class="workspace-resizer workspace-column-resizer"
+          role="separator"
+          tabindex="0"
+          aria-orientation="vertical"
+          aria-valuemin="40"
+          aria-valuemax="78"
+          aria-valuenow="60"
+          aria-label="コード／REPLとデバイスの幅を変更"
+          data-i18n-aria-label="layout.columnResize"
+        ></div>
+
+        <section class="virtual-board-panel" aria-labelledby="virtual-board-title">
+          <div class="virtual-board-heading">
+            <p class="eyebrow">Virtual board</p>
+            <h2 id="virtual-board-title" data-i18n="board.title">仮想ボード・デバイス</h2>
+            <p data-i18n="board.description">Device Modelの検証済み状態と操作だけを、固定コンポーネントで表示します。</p>
+            <p id="device-ui-input-status" class="device-ui-input-status" aria-live="polite"></p>
+          </div>
+          <details class="connection-overview connection-editor-panel">
+            <summary data-i18n="board.connectionSummary">Pico 2 Wの配線を編集</summary>
+            <p data-i18n="board.connectionDescription">
+              機能レベルのポートを接続します。I2CとSPIは1つのバスを複数デバイスで共有できます。
+            </p>
+            <div id="connection-editor-root"></div>
+          </details>
+          <div id="device-ui-root" class="device-ui-grid"></div>
+        </section>
+
+        <div id="terminal-heading" class="terminal-heading">
+          <span data-i18n="terminal.title">出力・REPL</span>
+          <span id="terminal-input-hint" data-i18n="terminal.hint">直接入力 · デバッグ停止中はpdbコマンド · 実行中は⌘/Ctrl+Cで強制停止</span>
+        </div>
+        <div id="terminal-shell" class="terminal-shell">
+          <pre id="terminal" class="terminal" role="log" aria-label="REPL出力" data-i18n-aria-label="terminal.outputLabel"><span id="terminal-text"></span><span id="terminal-cursor" class="terminal-cursor" aria-hidden="true"></span><span id="terminal-text-after-cursor"></span></pre>
+          <textarea
+            id="terminal-direct-input"
+            class="terminal-direct-input"
+            rows="1"
+            aria-label="REPLへ直接入力"
+            data-i18n-aria-label="terminal.inputLabel"
+            aria-describedby="terminal-input-hint"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <form id="debugger-command-form" class="debugger-command-form" hidden>
+          <div class="debugger-controls" role="group" aria-label="デバッガ操作" data-i18n-aria-label="debugger.controlsLabel">
+            <button
+              type="button"
+              data-debugger-command="step"
+              title="step: 呼び出し先へ入り、次の実行行で停止"
+              data-i18n-title="debugger.stepTitle"
+              data-i18n="debugger.step"
+            >
+              ステップイン
+            </button>
+            <button
+              type="button"
+              data-debugger-command="next"
+              title="next: 現在の関数内の次の行で停止"
+              data-i18n-title="debugger.nextTitle"
+              data-i18n="debugger.next"
+            >
+              次へ
+            </button>
+            <button
+              type="button"
+              data-debugger-command="return"
+              title="return: 現在の関数から戻るまで実行"
+              data-i18n-title="debugger.returnTitle"
+              data-i18n="debugger.return"
+            >
+              関数を抜ける
+            </button>
+            <button
+              type="button"
+              data-debugger-command="continue"
+              title="continue: 次のブレークポイントまで実行"
+              data-i18n-title="debugger.continueTitle"
+              data-i18n="debugger.continue"
+            >
+              続行
+            </button>
+            <button
+              class="danger-outline"
+              type="button"
+              data-debugger-command="quit"
+              title="quit: デバッグ実行を終了してWorkerを再生成"
+              data-i18n-title="debugger.quitTitle"
+              data-i18n="debugger.quit"
+            >
+              終了
+            </button>
+          </div>
+          <div class="debugger-command-row">
+            <label for="debugger-command-input">(Pdb)</label>
+            <input
+              id="debugger-command-input"
+              type="text"
+              aria-label="pdbコマンド"
+              data-i18n-aria-label="debugger.commandLabel"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+            <button type="submit" data-i18n="common.send">送信</button>
+          </div>
+        </form>
+
+        <form id="input-form" class="input-panel">
+          <label for="repl-input" data-i18n="repl.batchLabel">複数行をまとめて送信（任意）</label>
+          <textarea
+            id="repl-input"
+            rows="5"
+            spellcheck="false"
+            placeholder="例: 1 + 2"
+            data-i18n-placeholder="repl.placeholder"
+          ></textarea>
+          <div class="input-actions">
+            <span data-i18n="repl.reviewHint">内容を確認してから⌘/Ctrl + Enterでも送信できます</span>
+            <button id="send-button" type="submit" disabled data-i18n="repl.send">REPLへ送信</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="examples" aria-labelledby="examples-title">
+        <div class="examples-heading">
+          <div>
+            <p class="eyebrow" data-i18n="examples.eyebrow">Connected projects</p>
+            <h2 id="examples-title" data-i18n="examples.title">デバイス連携サンプル</h2>
+          </div>
+          <p data-i18n="examples.description">
+            複数デバイスの組み合わせや、実行中の操作を試せる応用作例です。個別デバイスの基本作例は各カードの「サンプル」から開けます。
+          </p>
+        </div>
+        <div class="scenario-example-grid">
+          <article class="scenario-example-card" data-scenario-example-card="button-rgb-controller">
+            <div class="scenario-example-tags" aria-hidden="true"><span>GPIO</span><span>PWM</span><span>UI</span></div>
+            <h3 data-i18n="examples.buttonRgbTitle">ボタン連動RGBランプ</h3>
+            <p data-i18n="examples.buttonRgbDescription">
+              実行中にGPIO 15ボタンを押すたび、内蔵LEDとRGB LEDの色を切り替えます。
+            </p>
+            <button
+              type="button"
+              data-scenario-example="button-rgb-controller"
+              data-i18n="examples.open"
+              data-i18n-aria-label="examples.buttonRgbOpen"
+              aria-label="ボタン連動RGBランプを新しいエディタタブで開く"
+            >エディタで開く</button>
+          </article>
+          <article class="scenario-example-card" data-scenario-example-card="analog-rgb-mixer">
+            <div class="scenario-example-tags" aria-hidden="true"><span>ADC</span><span>PWM</span><span>UI</span></div>
+            <h3 data-i18n="examples.analogRgbTitle">アナログ・カラーミキサー</h3>
+            <p data-i18n="examples.analogRgbDescription">
+              実行中にADCスライダーを動かし、RGB LEDの色とPWMインジケーターの明るさを連続制御します。
+            </p>
+            <button
+              type="button"
+              data-scenario-example="analog-rgb-mixer"
+              data-i18n="examples.open"
+              data-i18n-aria-label="examples.analogRgbOpen"
+              aria-label="アナログ・カラーミキサーを新しいエディタタブで開く"
+            >エディタで開く</button>
+          </article>
+          <article class="scenario-example-card" data-scenario-example-card="environment-dashboard">
+            <div class="scenario-example-tags" aria-hidden="true"><span>I2C</span><span>SPI</span><span>OLED</span></div>
+            <h3 data-i18n="examples.environmentTitle">環境センサー・ダッシュボード</h3>
+            <p data-i18n="examples.environmentDescription">
+              BME280の温度・湿度・気圧を読み取り、SSD1331 RGB OLEDへ色分けして描画します。
+            </p>
+            <button
+              type="button"
+              data-scenario-example="environment-dashboard"
+              data-i18n="examples.open"
+              data-i18n-aria-label="examples.environmentOpen"
+              aria-label="環境センサー・ダッシュボードを新しいエディタタブで開く"
+            >エディタで開く</button>
+          </article>
+          <article class="scenario-example-card" data-scenario-example-card="gps-rgb-beacon">
+            <div class="scenario-example-tags" aria-hidden="true"><span>UART</span><span>GPS</span><span>PWM</span></div>
+            <h3 data-i18n="examples.gpsBeaconTitle">GPS測位ビーコン</h3>
+            <p data-i18n="examples.gpsBeaconDescription">
+              GPSのNMEAとPPSを検証し、有効な測位をRGB LEDの緑色で通知します。
+            </p>
+            <button
+              type="button"
+              data-scenario-example="gps-rgb-beacon"
+              data-i18n="examples.open"
+              data-i18n-aria-label="examples.gpsBeaconOpen"
+              aria-label="GPS測位ビーコンを新しいエディタタブで開く"
+            >エディタで開く</button>
+          </article>
+        </div>
+      </section>
+
+      <footer>
+        <p data-i18n="footer.disclaimer">
+          非公式プロジェクトです。MicroPythonプロジェクトおよびMicroPython.orgとは
+          提携していません。
+        </p>
+        <p data-i18n="footer.raspberryPiTrademark">
+          Raspberry Pi is a trademark of Raspberry Pi Ltd.
+        </p>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

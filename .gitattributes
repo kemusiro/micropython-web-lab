@@ -1,0 +1,2 @@
+src/vendor/micropython-build/micropython.mjs -whitespace
+runtime/micropython/patches/*.patch -whitespace

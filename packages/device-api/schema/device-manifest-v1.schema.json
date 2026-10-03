@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MicroPython Web Lab Device Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "version", "deviceApiVersion", "name", "description", "license", "entrypoint", "requires", "ports"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+    "version": { "type": "string", "maxLength": 128, "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$" },
+    "deviceApiVersion": { "const": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "license": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*(?: WITH [A-Za-z0-9][A-Za-z0-9.+-]*)?$" },
+    "entrypoint": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^\\./(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\\.js$" },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boardCapabilities"],
+      "properties": {
+        "boardCapabilities": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } }
+      }
+    },
+    "ports": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/port" } }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+    "port": { "oneOf": [{ "$ref": "#/$defs/basicPort" }, { "$ref": "#/$defs/i2cPort" }] },
+    "basicPort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "kind": { "enum": ["gpio-observer", "gpio-driver", "adc-source", "spi-target", "uart-peer", "pwm-observer"] }
+      }
+    },
+    "i2cPort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "kind": { "const": "i2c-target" },
+        "defaultAddress": { "type": "integer", "minimum": 8, "maximum": 119 }
+      }
+    }
+  }
+}

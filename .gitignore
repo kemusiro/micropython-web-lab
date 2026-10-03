@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.playwright/
+playwright-report/
+test-results/
+.vite/
+coverage/
+.cache/
+*.log
+*.tsbuildinfo
+.DS_Store
+/web-lab.local.json

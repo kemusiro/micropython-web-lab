@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "org.example.local-bme280",
+  "version": "0.1.0",
+  "deviceApiVersion": 1,
+  "name": "Local BME280 Fixture",
+  "description": "Local multi-device I2C fixture modeled after a BME280",
+  "license": "MIT",
+  "entrypoint": "./src/device.js",
+  "requires": {
+    "boardCapabilities": ["i2c-controller-v1"]
+  },
+  "ports": [
+    {
+      "id": "i2c",
+      "kind": "i2c-target",
+      "defaultAddress": 118
+    }
+  ]
+}

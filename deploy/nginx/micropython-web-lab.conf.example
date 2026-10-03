@@ -1,0 +1,32 @@
+# Replace the example host, certificate paths, and document root before enabling this file.
+# Copy security-headers.conf to /etc/nginx/snippets/micropython-web-lab-security.conf.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name web-lab.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name web-lab.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/web-lab.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/web-lab.example.com/privkey.pem;
+
+    root /srv/micropython-web-lab/dist;
+    index index.html;
+
+    include /etc/nginx/snippets/micropython-web-lab-security.conf;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ \.wasm$ {
+        default_type application/wasm;
+        try_files $uri =404;
+    }
+}

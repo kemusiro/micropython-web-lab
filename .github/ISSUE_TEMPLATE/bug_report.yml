@@ -1,0 +1,75 @@
+name: 不具合報告
+description: 再現可能なWeb Labの不具合を報告します
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。秘密情報やユーザーコード全文は貼り付けず、可能なら最小の再現コードを使用してください。
+        セキュリティ問題は公開IssueではなくSECURITY.mdの方法で報告してください。
+  - type: checkboxes
+    id: preliminary
+    attributes:
+      label: 事前確認
+      options:
+        - label: 同じ内容のIssueがないことを確認しました
+          required: true
+        - label: セキュリティ上の秘密情報や個人情報を含めていません
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Web Labの版またはURL
+      description: 画面に表示される版、コミット、または利用したURLを記載してください。
+      placeholder: "例: https://lab.asamomiji.jp/ または commit abc1234"
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: ブラウザ
+      options:
+        - Chrome
+        - Edge
+        - Firefox
+        - Safari
+        - その他
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: ブラウザ版とOS
+      placeholder: "例: Edge 130 / Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 新しいセッションから再現できる最小の手順を番号付きで記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待した結果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の結果
+      description: エラー表示は秘密情報を除いて記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: recovery
+    attributes:
+      label: 復旧方法と再現頻度
+      description: 停止、再起動、再読み込みで復旧したか、毎回または断続的に発生するかを記載してください。
+  - type: textarea
+    id: additional
+    attributes:
+      label: 補足
+      description: 最小の再現コード、スクリーンショット、関連Issueがあれば記載してください。

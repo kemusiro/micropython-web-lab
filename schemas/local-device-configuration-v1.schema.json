@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MicroPython Web Lab Local Device Configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "boardProfile", "basePreset", "sources", "instances"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "boardProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "basePreset": {
+      "enum": ["pico-2-w-managed-v1", "pico-2-w-board-only-v1"]
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "instances": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/instance" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "deviceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "semanticVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "source", "expected"],
+      "properties": {
+        "sourceId": { "$ref": "#/$defs/identifier" },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "directory"],
+          "properties": {
+            "kind": { "const": "path" },
+            "directory": { "type": "string", "minLength": 1, "maxLength": 1024 }
+          }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["deviceId", "deviceVersion"],
+          "properties": {
+            "deviceId": { "$ref": "#/$defs/deviceId" },
+            "deviceVersion": { "$ref": "#/$defs/semanticVersion" }
+          }
+        }
+      }
+    },
+    "instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instanceId", "sourceId", "ports"],
+      "properties": {
+        "instanceId": { "$ref": "#/$defs/identifier" },
+        "sourceId": { "$ref": "#/$defs/identifier" },
+        "ports": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/port" }
+        }
+      }
+    },
+    "port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["portId", "endpoint"],
+      "properties": {
+        "portId": { "$ref": "#/$defs/identifier" },
+        "endpoint": { "$ref": "#/$defs/endpoint" }
+      }
+    },
+    "endpoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/gpioEndpoint" },
+        { "$ref": "#/$defs/adcEndpoint" },
+        { "$ref": "#/$defs/i2cEndpoint" },
+        { "$ref": "#/$defs/spiEndpoint" },
+        { "$ref": "#/$defs/uartEndpoint" },
+        { "$ref": "#/$defs/pwmEndpoint" }
+      ]
+    },
+    "gpioEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "pin"],
+      "properties": {
+        "kind": { "const": "gpio" },
+        "pin": { "$ref": "#/$defs/pin" }
+      }
+    },
+    "adcEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "pin"],
+      "properties": {
+        "kind": { "const": "adc" },
+        "pin": { "$ref": "#/$defs/pin" }
+      }
+    },
+    "i2cEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "controller", "address"],
+      "properties": {
+        "kind": { "const": "i2c" },
+        "controller": { "type": "integer", "minimum": 0 },
+        "address": { "type": "integer", "minimum": 8, "maximum": 119 }
+      }
+    },
+    "spiEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "controller", "selectPort"],
+      "properties": {
+        "kind": { "const": "spi" },
+        "controller": { "type": "integer", "minimum": 0 },
+        "selectPort": { "$ref": "#/$defs/identifier" },
+        "activeLevel": { "enum": [0, 1] }
+      }
+    },
+    "uartEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "controller"],
+      "properties": {
+        "kind": { "const": "uart" },
+        "controller": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "pwmEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "pin"],
+      "properties": {
+        "kind": { "const": "pwm" },
+        "pin": { "$ref": "#/$defs/pin" }
+      }
+    },
+    "pin": {
+      "type": "string",
+      "pattern": "^(?:GP[0-9]+|LED)$"
+    }
+  }
+}

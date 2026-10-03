@@ -1,0 +1,19 @@
+{
+  "name": "@micropython-web-lab/device-api",
+  "version": "0.1.0-preview.0",
+  "private": true,
+  "description": "Internal preview of the MicroPython Web Lab Device API",
+  "type": "module",
+  "license": "MIT",
+  "files": ["dist", "schema"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema": "./schema/device-manifest-v1.schema.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

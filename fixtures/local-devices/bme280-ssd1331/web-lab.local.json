@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "boardProfile": {
+    "id": "raspberry-pi-pico-2-w-v1",
+    "version": 1
+  },
+  "basePreset": "pico-2-w-board-only-v1",
+  "sources": [
+    {
+      "sourceId": "bme280-development",
+      "source": {
+        "kind": "path",
+        "directory": "../../devices/local-bme280"
+      },
+      "expected": {
+        "deviceId": "org.example.local-bme280",
+        "deviceVersion": "0.1.0"
+      }
+    },
+    {
+      "sourceId": "ssd1331-development",
+      "source": {
+        "kind": "path",
+        "directory": "../../devices/local-ssd1331"
+      },
+      "expected": {
+        "deviceId": "org.example.local-ssd1331",
+        "deviceVersion": "0.1.0"
+      }
+    }
+  ],
+  "instances": [
+    {
+      "instanceId": "environment-sensor",
+      "sourceId": "bme280-development",
+      "ports": [
+        {
+          "portId": "i2c",
+          "endpoint": { "kind": "i2c", "controller": 0, "address": 118 }
+        }
+      ]
+    },
+    {
+      "instanceId": "environment-display",
+      "sourceId": "ssd1331-development",
+      "ports": [
+        {
+          "portId": "spi",
+          "endpoint": {
+            "kind": "spi",
+            "controller": 0,
+            "selectPort": "cs",
+            "activeLevel": 0
+          }
+        },
+        { "portId": "cs", "endpoint": { "kind": "gpio", "pin": "GP5" } },
+        { "portId": "dc", "endpoint": { "kind": "gpio", "pin": "GP2" } },
+        { "portId": "reset", "endpoint": { "kind": "gpio", "pin": "GP3" } }
+      ]
+    }
+  ]
+}

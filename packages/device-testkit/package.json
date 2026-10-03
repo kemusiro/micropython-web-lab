@@ -1,0 +1,24 @@
+{
+  "name": "@micropython-web-lab/device-testkit",
+  "version": "0.1.0-preview.0",
+  "private": true,
+  "description": "Internal preview of the MicroPython Web Lab Device API conformance test kit",
+  "type": "module",
+  "license": "MIT",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@micropython-web-lab/device-api": "^0.1.0-preview.0"
+  },
+  "devDependencies": {
+    "@micropython-web-lab/device-api": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

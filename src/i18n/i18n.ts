@@ -1,0 +1,469 @@
+export const SUPPORTED_LOCALES = ["ja", "en"] as const;
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+
+export const LOCALE_STORAGE_KEY = "micropython-web-lab:locale:v1";
+
+const ENGLISH_MESSAGES = {
+  "meta.description": "A MicroPython code editor and REPL running in a Web Worker",
+  "language.label": "Language",
+  "hero.description":
+    "An experimental environment for editing and running MicroPython code in a dedicated browser Worker.",
+  "runtime.starting": "Starting",
+  "runtime.loading": "Loading MicroPython",
+  "runtime.ready": "Ready",
+  "runtime.executing": "Running script",
+  "runtime.debugging": "Debugger paused",
+  "runtime.stopped": "Stopped",
+  "runtime.error": "Error",
+  "local.banner": "Local development mode · Unapproved device",
+  "local.summary": "{instances} instances / {sources} sources: {names}",
+  "toolbar.restart": "Restart",
+  "toolbar.stop": "Stop",
+  "toolbar.clear": "Clear output",
+  "toolbar.recoveryHint": "You can discard the Worker with Stop even if it becomes unresponsive",
+  "layout.columnResize": "Resize the code/REPL and device panes",
+  "layout.rowResize": "Resize the code editor and REPL panes",
+  "editor.label": "Code editor",
+  "editor.shortcut": "Tab / Shift+Tab to indent · ⌘/Ctrl + Enter to run",
+  "draft.checking": "Checking saved state",
+  "draft.save": "Save in this browser",
+  "draft.reset": "Restore initial example",
+  "editor.limit": "Maximum runtime: 10 seconds · Output limit: 100,000 characters",
+  "editor.debug": "Debug",
+  "editor.run": "Run script",
+  "board.title": "Virtual board and devices",
+  "board.description": "Shows validated Device Model state and controls using fixed components.",
+  "board.connectionSummary": "Edit Pico 2 W connections",
+  "board.connectionDescription":
+    "Connect functional ports. Multiple devices can share one I2C or SPI bus.",
+  "terminal.title": "Output and REPL",
+  "terminal.hint":
+    "Direct input · pdb commands while paused · ⌘/Ctrl+C to interrupt while running",
+  "terminal.outputLabel": "REPL output",
+  "terminal.inputLabel": "Direct REPL input",
+  "debugger.controlsLabel": "Debugger controls",
+  "debugger.stepTitle": "step: enter a call and pause at the next executable line",
+  "debugger.step": "Step into",
+  "debugger.nextTitle": "next: pause at the next line in the current function",
+  "debugger.next": "Next",
+  "debugger.returnTitle": "return: run until the current function returns",
+  "debugger.return": "Step out",
+  "debugger.continueTitle": "continue: run until the next breakpoint",
+  "debugger.continue": "Continue",
+  "debugger.quitTitle": "quit: end debugging and recreate the Worker",
+  "debugger.quit": "Quit",
+  "debugger.commandLabel": "pdb command",
+  "debugger.globalsTitle": "Global variables",
+  "debugger.noGlobals": "No global variables to display",
+  "debugger.location": "{filename}:{line} · {functionName}",
+  "debugger.currentLine": "Current line {line}",
+  "common.send": "Send",
+  "common.yes": "Yes",
+  "common.no": "No",
+  "repl.batchLabel": "Send multiple lines together (optional)",
+  "repl.placeholder": "Example: 1 + 2",
+  "repl.reviewHint": "Review the contents, then use ⌘/Ctrl + Enter to send",
+  "repl.send": "Send to REPL",
+  "examples.eyebrow": "Connected projects",
+  "examples.title": "Connected device examples",
+  "examples.description":
+    "Explore projects that combine devices or react to controls while running. Open each device card's Sample for its basic example.",
+  "examples.open": "Open in editor",
+  "examples.buttonRgbTitle": "Button-controlled RGB lamp",
+  "examples.buttonRgbDescription":
+    "Press the virtual push button while the script runs to cycle the onboard LED and RGB LED colors.",
+  "examples.buttonRgbOpen": "Open the button-controlled RGB lamp in a new editor tab",
+  "examples.analogRgbTitle": "Analog color mixer",
+  "examples.analogRgbDescription":
+    "Move the ADC slider while the script runs to control the RGB LED color and PWM indicator brightness.",
+  "examples.analogRgbOpen": "Open the analog color mixer in a new editor tab",
+  "examples.environmentTitle": "Environmental sensor dashboard",
+  "examples.environmentDescription":
+    "Read temperature, humidity, and pressure from the BME280 and draw them in color on the SSD1331 RGB OLED.",
+  "examples.environmentOpen": "Open the environmental sensor dashboard in a new editor tab",
+  "examples.gpsBeaconTitle": "GPS fix beacon",
+  "examples.gpsBeaconDescription":
+    "Validate GPS NMEA and PPS data, then show a valid fix in green on the RGB LED.",
+  "examples.gpsBeaconOpen": "Open the GPS fix beacon in a new editor tab",
+  "footer.disclaimer":
+    "This is an unofficial project and is not affiliated with the MicroPython project or MicroPython.org.",
+  "footer.raspberryPiTrademark": "Raspberry Pi is a trademark of Raspberry Pi Ltd.",
+  "draft.resetConfirm":
+    "Clear every editor tab saved in this browser and restore the initial example?",
+  "draft.unavailable": "Browser storage is unavailable.",
+  "draft.initial": "Initial example (not saved)",
+  "draft.restored": "Restored saved code · {time}",
+  "draft.pending": "Waiting to save…",
+  "draft.unknownResult": "The save result could not be confirmed.",
+  "draft.saved": "Saved in this browser · {time}",
+  "editor.tabsLabel": "Editor tabs",
+  "editor.newTab": "New tab",
+  "editor.closeTab": "Close {title}",
+  "editor.closeTabConfirm": "Close {title}? Its code will be removed from this browser.",
+  "editor.untitled": "untitled.py",
+  "editor.sampleTitle": "{device} sample",
+  "editor.tabLimit": "You can open up to {count} editor tabs.",
+  "device.inputUnavailable": "Synchronous input is unavailable. Cross-origin isolation is required.",
+  "device.inputAvailable": "Synchronous input is available for button, ADC, UART, GPS, and BME280.",
+  "device.waiting": "Waiting for startup",
+  "device.actionSent": "Action sent.",
+  "device.pixelInvalid": "The pixel display state is invalid.",
+  "device.pixelLength": "Pixel data length does not match the display size.",
+  "device.canvasUnavailable": "Canvas 2D is unavailable.",
+  "device.openSample": "Sample",
+  "device.openSampleAria": "Open a new editor tab with the {device} sample",
+  "device.movePanel": "Move",
+  "device.panelSize": "Panel size {size}",
+  "device.movePanelTitle": "Drag to reorder · Arrow keys also move this panel",
+  "device.movePanelAria":
+    "Move the {device} panel. Position {position} of {total}. Use arrow keys, Home, or End to reorder.",
+  "device.panelMoved": "Moved {device} to position {position} of {total}.",
+  "connection.current": "Showing the current connections.",
+  "connection.localReadonly":
+    "These connections were generated from a local Device configuration and cannot be changed here.",
+  "connection.description":
+    "Connect devices and choose functional port assignments. Power, ground, and resistors are omitted.",
+  "connection.reset": "Restore managed connections",
+  "connection.resetDone":
+    "Managed connections were restored. The runtime will not change until you apply them.",
+  "connection.discard": "Discard changes",
+  "connection.discarded": "Discarded unapplied connection changes.",
+  "connection.apply": "Apply connections",
+  "connection.unsaved": "Unapplied changes",
+  "connection.noUnsaved": "No unapplied changes",
+  "connection.searchLabel": "Search devices",
+  "connection.searchPlaceholder": "Search by device name or port",
+  "connection.filterLabel": "Filter devices",
+  "connection.filterAll": "All devices",
+  "connection.filterConnected": "Connected only",
+  "connection.clearFilter": "Clear filter",
+  "connection.selectAll": "Select all",
+  "connection.deselectAll": "Clear selection",
+  "connection.selectedAll": "All devices are selected. Apply connections to update the runtime.",
+  "connection.deselectedAll": "All devices are deselected. Apply connections to update the runtime.",
+  "connection.collapseAll": "Collapse shown",
+  "connection.expandAll": "Expand shown",
+  "connection.filterCount": "Showing {visible} of {total}",
+  "connection.noMatches": "No devices match this filter.",
+  "connection.expandDevice": "Expand {name}",
+  "connection.collapseDevice": "Collapse {name}",
+  "connection.connected": "Connected",
+  "connection.disconnected": "Disconnected",
+  "connection.deviceSummary": "{state} · {kinds}",
+  "connection.dragBoardSocket": "Move the Pico end of {owner} from {endpoint}",
+  "connection.dragDeviceSocket": "Move the device end of {name} {port}",
+  "connection.dragging": "Dragging a {kind} connection. Drop it on a highlighted compatible socket.",
+  "connection.dragChanged": "Connection changed by dragging. Apply connections to update the runtime.",
+  "connection.dropTargets": "Drop on a {kind} destination",
+  "connection.dropTargetAria": "Connect to {target} ({usage})",
+  "connection.endpointUsed": "In use",
+  "connection.endpointUnused": "Available",
+  "connection.legend":
+    "Drag the Pico end of a wire to another Pico endpoint or the destination list above. Drag its device end to a compatible port on another device. I2C and SPI buses can branch to multiple devices.",
+  "connection.functionalPorts": "Pico endpoints · move a wire to another Pico endpoint",
+  "connection.none": "No connections",
+  "connection.connect": "Connect",
+  "connection.connectAria": "Connect {name}",
+  "connection.destinationAria": "{name} {port} destination",
+  "connection.changed": "Connections changed. Select Apply connections to update the runtime.",
+  "connection.conflictPin": "{pin} is assigned more than once ({owners}). Choose another port.",
+  "connection.conflictI2cAddress":
+    "I2C{controller} address 0x{address} is duplicated ({owners}).",
+  "connection.conflictResource": "{resource} is assigned more than once ({owners}).",
+  "connection.conflictUart": "UART{controller} can connect to only one peer device.",
+  "connection.conflictSpiFallback":
+    "SPI{controller} can have only one default target.",
+  "connection.invalidDetail": "Cannot apply these connections: {message}",
+  "connection.defaultTarget": "Default target",
+  "connection.notSet": "not set",
+  "connection.spiSelect": "CS={port} · {level} selected",
+  "connection.port.input": "Input",
+  "connection.port.output": "Output",
+  "connection.port.red": "Red",
+  "connection.port.green": "Green",
+  "connection.port.blue": "Blue",
+  "connection.initialLocal": "Showing connections generated from the local Device configuration.",
+  "connection.storageUnavailable": "Browser storage is unavailable; using managed connections.",
+  "connection.managed": "Using managed connections.",
+  "connection.loadFallback": "{error} Using managed connections. Saved data was not deleted.",
+  "connection.invalidStored":
+    "The saved connections cannot be applied: {error} Using managed connections.",
+  "connection.restored": "Restored connections saved in this browser ({time}).",
+  "connection.saveUnavailable": "Cannot apply connections because they could not be saved.",
+  "connection.appliedTerminal": "\n[system] Applied connections and recreating the Worker.\n",
+  "connection.applied": "Saved connections in this browser and applied them to the runtime.",
+  "system.restarting": "\n[system] Recreating the Worker.\n",
+  "system.stopped": "\n[system] Worker stopped.\n",
+  "system.inputUnavailable": "\n[system] Cannot send input because the runtime is not running.\n",
+  "system.directInputUnavailable": "\n[system] Cannot enter input because the runtime is not running.\n",
+  "system.debuggerCommandError": "\n[system] Could not send debugger command: {message}\n",
+  "system.debuggerWait": "\n[system] Wait until the debugger is ready for a command.\n",
+  "system.debuggerQuit": "[system] Ending debug execution and recreating the Worker.\n",
+  "system.interrupt":
+    "\n^C\n[system] Interrupting running code and recreating the Worker. REPL state will be reset.\n",
+  "system.enterCode": "\n[system] Enter code to run.\n",
+  "system.debugIsolation": "\n[system] Debug execution requires cross-origin isolation.\n",
+  "system.waitReady": "\n[system] Wait until the runtime is ready.\n",
+  "system.debugStarted": "\n[debug] Debug execution started. Paused at the first executable line.\n",
+  "system.runStarted": "\n[script] Normal execution started.\n",
+  "system.runComplete": "\n[script] Execution completed.\n",
+  "system.unknownError": "Unknown error",
+  "system.oldOutputOmitted": "[system] Older output was omitted.\n{output}",
+  "debugger.requiresIsolation": "Debug execution requires cross-origin isolation",
+  "debugger.description": "Start at the first executable line with pdb-compatible commands",
+  "device.requiresIsolation": "Device actions require cross-origin isolation.",
+  "device.positionFormat": "Enter the position as latitude,longitude,altitude(m).",
+  "device.latitudeRange": "Latitude must be between -90 and 90.",
+  "device.longitudeRange": "Longitude must be between -180 and 180.",
+  "device.altitudeRange": "Altitude must be between -1000 and 20000 m.",
+  "device.unsupportedAction": "Unsupported device action: {action}",
+} as const;
+
+export type TranslationKey = keyof typeof ENGLISH_MESSAGES;
+
+const JAPANESE_MESSAGES: Record<TranslationKey, string> = {
+  "meta.description": "ブラウザ内のWeb Workerで動作するMicroPythonコードエディタとREPL",
+  "language.label": "表示言語",
+  "hero.description": "MicroPythonのコードをブラウザ内の専用Workerで編集・実行できる実験環境です。",
+  "runtime.starting": "起動中", "runtime.loading": "MicroPythonを読み込んでいます",
+  "runtime.ready": "実行可能", "runtime.executing": "スクリプト実行中",
+  "runtime.debugging": "デバッガ停止中", "runtime.stopped": "停止中", "runtime.error": "エラー",
+  "local.banner": "ローカル開発モード · 未承認デバイス",
+  "local.summary": "{instances}インスタンス／{sources}ソース: {names}",
+  "toolbar.restart": "再起動", "toolbar.stop": "停止", "toolbar.clear": "出力を消去",
+  "toolbar.recoveryHint": "Workerが応答しなくても「停止」で破棄できます",
+  "layout.columnResize": "コード／REPLとデバイスの幅を変更",
+  "layout.rowResize": "コードエディタとREPLの高さを変更",
+  "editor.label": "コードエディタ", "editor.shortcut": "Tab／Shift+Tabでインデント · ⌘/Ctrl + Enterで実行",
+  "draft.checking": "保存状態を確認しています", "draft.save": "このブラウザに保存",
+  "draft.reset": "初期サンプルに戻す", "editor.limit": "実動時間は最大10秒・出力100,000文字です",
+  "editor.debug": "デバッグ実行", "editor.run": "スクリプトを実行",
+  "board.title": "仮想ボード・デバイス",
+  "board.description": "Device Modelの検証済み状態と操作だけを、固定コンポーネントで表示します。",
+  "board.connectionSummary": "Pico 2 Wの配線を編集",
+  "board.connectionDescription": "機能レベルのポートを接続します。I2CとSPIは1つのバスを複数デバイスで共有できます。",
+  "terminal.title": "出力・REPL",
+  "terminal.hint": "直接入力 · デバッグ停止中はpdbコマンド · 実行中は⌘/Ctrl+Cで強制停止",
+  "terminal.outputLabel": "REPL出力", "terminal.inputLabel": "REPLへ直接入力",
+  "debugger.controlsLabel": "デバッガ操作",
+  "debugger.stepTitle": "step: 呼び出し先へ入り、次の実行行で停止", "debugger.step": "ステップイン",
+  "debugger.nextTitle": "next: 現在の関数内の次の行で停止", "debugger.next": "次へ",
+  "debugger.returnTitle": "return: 現在の関数から戻るまで実行", "debugger.return": "関数を抜ける",
+  "debugger.continueTitle": "continue: 次のブレークポイントまで実行", "debugger.continue": "続行",
+  "debugger.quitTitle": "quit: デバッグ実行を終了してWorkerを再生成", "debugger.quit": "終了",
+  "debugger.commandLabel": "pdbコマンド", "debugger.globalsTitle": "グローバル変数",
+  "debugger.noGlobals": "表示できるグローバル変数はありません",
+  "debugger.location": "{filename}:{line} · {functionName}", "debugger.currentLine": "現在行 {line}",
+  "common.send": "送信", "common.yes": "はい", "common.no": "いいえ",
+  "repl.batchLabel": "複数行をまとめて送信（任意）", "repl.placeholder": "例: 1 + 2",
+  "repl.reviewHint": "内容を確認してから⌘/Ctrl + Enterでも送信できます", "repl.send": "REPLへ送信",
+  "examples.eyebrow": "デバイス連携作例", "examples.title": "デバイス連携サンプル",
+  "examples.description": "複数デバイスの組み合わせや、実行中の操作を試せる応用作例です。個別デバイスの基本作例は各カードの「サンプル」から開けます。",
+  "examples.open": "エディタで開く",
+  "examples.buttonRgbTitle": "ボタン連動RGBランプ",
+  "examples.buttonRgbDescription": "実行中に押しボタンを押すたび、内蔵LEDとRGB LEDの色を切り替えます。",
+  "examples.buttonRgbOpen": "ボタン連動RGBランプを新しいエディタタブで開く",
+  "examples.analogRgbTitle": "アナログ・カラーミキサー",
+  "examples.analogRgbDescription": "実行中にADCスライダーを動かし、RGB LEDの色とPWMインジケーターの明るさを連続制御します。",
+  "examples.analogRgbOpen": "アナログ・カラーミキサーを新しいエディタタブで開く",
+  "examples.environmentTitle": "環境センサー・ダッシュボード",
+  "examples.environmentDescription": "BME280の温度・湿度・気圧を読み取り、SSD1331 RGB OLEDへ色分けして描画します。",
+  "examples.environmentOpen": "環境センサー・ダッシュボードを新しいエディタタブで開く",
+  "examples.gpsBeaconTitle": "GPS測位ビーコン",
+  "examples.gpsBeaconDescription": "GPSのNMEAとPPSを検証し、有効な測位をRGB LEDの緑色で通知します。",
+  "examples.gpsBeaconOpen": "GPS測位ビーコンを新しいエディタタブで開く",
+  "footer.disclaimer": "非公式プロジェクトです。MicroPythonプロジェクトおよびMicroPython.orgとは提携していません。",
+  "footer.raspberryPiTrademark": "Raspberry Pi is a trademark of Raspberry Pi Ltd.",
+  "draft.resetConfirm": "このブラウザに保存したすべてのエディタタブを消去し、初期サンプルへ戻しますか？",
+  "draft.unavailable": "ブラウザ保存を利用できません。", "draft.initial": "初期サンプル（未保存）",
+  "draft.restored": "保存済みのコードを復元 · {time}", "draft.pending": "保存待ち…",
+  "draft.unknownResult": "保存結果を確認できません。", "draft.saved": "このブラウザに保存済み · {time}",
+  "editor.tabsLabel": "コードエディタのタブ", "editor.newTab": "新しいタブ",
+  "editor.closeTab": "{title}を閉じる",
+  "editor.closeTabConfirm": "{title}を閉じますか？このタブのコードはブラウザから削除されます。",
+  "editor.untitled": "無題.py", "editor.sampleTitle": "{device} サンプル",
+  "editor.tabLimit": "エディタタブは最大{count}件まで開けます。",
+  "device.inputUnavailable": "同期入力は利用できません。クロスオリジン分離が必要です。",
+  "device.inputAvailable": "ボタン、ADC、UART、GPS、BME280の同期入力を利用できます。",
+  "device.waiting": "起動待ち", "device.actionSent": "操作を送信しました。",
+  "device.pixelInvalid": "ピクセル表示の状態値が不正です。",
+  "device.pixelLength": "ピクセル表示のデータ長が画面サイズと一致しません。",
+  "device.canvasUnavailable": "Canvas 2Dを利用できません。",
+  "device.openSample": "サンプル", "device.openSampleAria": "{device}のサンプルを新しいエディタタブで開く",
+  "device.movePanel": "移動", "device.panelSize": "パネルサイズ {size}",
+  "device.movePanelTitle": "ドラッグで並べ替え · 矢印キーでも移動できます",
+  "device.movePanelAria": "{device}パネルを移動。現在位置は{total}件中{position}番目です。矢印キー、Home、Endで並べ替えられます。",
+  "device.panelMoved": "{device}を{total}件中{position}番目へ移動しました。",
+  "connection.current": "現在の配線を表示しています。",
+  "connection.localReadonly": "ローカルDevice構成から生成された配線です。この画面では変更できません。",
+  "connection.description": "デバイスを接続し、機能ポートの割り当てを選びます。電源・GND・抵抗は省略します。",
+  "connection.reset": "管理版の配線に戻す",
+  "connection.resetDone": "管理版の配線へ戻しました。適用するまで実行環境は変わりません。",
+  "connection.discard": "変更を取り消す",
+  "connection.discarded": "未適用の配線変更を取り消しました。",
+  "connection.apply": "配線を適用",
+  "connection.unsaved": "未適用の変更あり",
+  "connection.noUnsaved": "未適用の変更なし",
+  "connection.searchLabel": "デバイスを検索",
+  "connection.searchPlaceholder": "デバイス名やポートで検索",
+  "connection.filterLabel": "デバイスを絞り込み",
+  "connection.filterAll": "すべてのデバイス",
+  "connection.filterConnected": "接続中のみ",
+  "connection.clearFilter": "絞り込みを解除",
+  "connection.selectAll": "すべて選択",
+  "connection.deselectAll": "すべて解除",
+  "connection.selectedAll": "すべてのデバイスを選択しました。「配線を適用」で実行環境へ反映します。",
+  "connection.deselectedAll": "すべてのデバイスの選択を解除しました。「配線を適用」で実行環境へ反映します。",
+  "connection.collapseAll": "表示中を折りたたむ",
+  "connection.expandAll": "表示中を展開",
+  "connection.filterCount": "{total}件中{visible}件を表示",
+  "connection.noMatches": "条件に一致するデバイスはありません。",
+  "connection.expandDevice": "{name}を展開",
+  "connection.collapseDevice": "{name}を折りたたむ",
+  "connection.connected": "接続中",
+  "connection.disconnected": "未接続",
+  "connection.deviceSummary": "{state} · {kinds}",
+  "connection.dragBoardSocket": "{owner}のPico側端点（{endpoint}）を移動",
+  "connection.dragDeviceSocket": "{name}の{port}にあるデバイス側端点を移動",
+  "connection.dragging": "{kind}接続をドラッグ中です。強調表示された互換ソケットへドロップしてください。",
+  "connection.dragChanged": "ドラッグで配線を変更しました。「配線を適用」で実行環境へ反映します。",
+  "connection.dropTargets": "{kind}の接続先へドロップ",
+  "connection.dropTargetAria": "{target}へ接続（{usage}）",
+  "connection.endpointUsed": "使用中",
+  "connection.endpointUnused": "未使用",
+  "connection.legend": "結線のPico側端点は別のPico端子または上部の接続先一覧へ移動できます。デバイス側端点は別デバイスの互換ポートへ移動できます。I2CとSPIは複数デバイスへ分岐できます。",
+  "connection.functionalPorts": "Pico側端子 · 結線を別のPico端子へ移動", "connection.none": "接続なし", "connection.connect": "接続",
+  "connection.connectAria": "{name}を接続", "connection.destinationAria": "{name} {port} 接続先",
+  "connection.changed": "配線を変更しました。「配線を適用」で実行環境へ反映します。",
+  "connection.conflictPin": "{pin}の割り当てが重複しています（{owners}）。別のポートを選択してください。",
+  "connection.conflictI2cAddress": "I2C{controller}のアドレス0x{address}が重複しています（{owners}）。",
+  "connection.conflictResource": "{resource}の割り当てが重複しています（{owners}）。",
+  "connection.conflictUart": "UART{controller}に接続できる相手は1台だけです。",
+  "connection.conflictSpiFallback": "SPI{controller}の既定ターゲットは1台だけ設定できます。",
+  "connection.invalidDetail": "この配線は適用できません: {message}",
+  "connection.defaultTarget": "既定ターゲット", "connection.notSet": "未設定",
+  "connection.spiSelect": "CS={port} · {level}選択",
+  "connection.port.input": "入力", "connection.port.output": "出力", "connection.port.red": "赤",
+  "connection.port.green": "緑", "connection.port.blue": "青",
+  "connection.initialLocal": "ローカルDevice構成から生成した配線を表示しています。",
+  "connection.storageUnavailable": "ブラウザ保存を利用できないため、管理版の配線を使用します。",
+  "connection.managed": "管理版の配線を使用しています。",
+  "connection.loadFallback": "{error} 管理版の配線を使用します。保存データは削除していません。",
+  "connection.invalidStored": "保存された配線は適用できません: {error} 管理版の配線を使用します。",
+  "connection.restored": "このブラウザに保存した配線を復元しました（{time}）。",
+  "connection.saveUnavailable": "配線を保存できないため適用できません。",
+  "connection.appliedTerminal": "\n[system] 配線を適用し、Workerを再生成しています。\n",
+  "connection.applied": "配線をこのブラウザへ保存し、実行環境へ適用しました。",
+  "system.restarting": "\n[system] Workerを再生成しています。\n", "system.stopped": "\n[system] Workerを停止しました。\n",
+  "system.inputUnavailable": "\n[system] ランタイムが起動していないため入力を送信できません。\n",
+  "system.directInputUnavailable": "\n[system] ランタイムが起動していないため入力できません。\n",
+  "system.debuggerCommandError": "\n[system] デバッガコマンドを送信できません: {message}\n",
+  "system.debuggerWait": "\n[system] デバッガがコマンド待ちになるまでお待ちください。\n",
+  "system.debuggerQuit": "[system] デバッグ実行を終了し、Workerを再生成しています。\n",
+  "system.interrupt": "\n^C\n[system] 実行中のコードを強制停止し、Workerを再生成しています。REPLの状態は初期化されます。\n",
+  "system.enterCode": "\n[system] 実行するコードを入力してください。\n",
+  "system.debugIsolation": "\n[system] デバッグ実行にはクロスオリジン分離が必要です。\n",
+  "system.waitReady": "\n[system] ランタイムが実行可能になるまで待ってください。\n",
+  "system.debugStarted": "\n[debug] デバッグ実行を開始しました。最初の実行行で停止します。\n",
+  "system.runStarted": "\n[script] 通常実行を開始しました。\n", "system.runComplete": "\n[script] 実行が完了しました。\n",
+  "system.unknownError": "不明なエラー", "system.oldOutputOmitted": "[system] 古い出力を省略しました。\n{output}",
+  "debugger.requiresIsolation": "デバッグ実行にはクロスオリジン分離が必要です",
+  "debugger.description": "pdb互換コマンドで最初の実行行からデバッグします",
+  "device.requiresIsolation": "デバイス操作にはクロスオリジン分離が必要です。",
+  "device.positionFormat": "測位位置は「緯度,経度,高度(m)」の形式で入力してください。",
+  "device.latitudeRange": "緯度は-90〜90で入力してください。", "device.longitudeRange": "経度は-180〜180で入力してください。",
+  "device.altitudeRange": "高度は-1000〜20000mで入力してください。",
+  "device.unsupportedAction": "未対応のデバイス操作です: {action}",
+};
+
+let activeLocale: SupportedLocale = "ja";
+
+export function resolveLocale(
+  storedLocale: string | null,
+  browserLanguages: readonly string[],
+): SupportedLocale {
+  if (isSupportedLocale(storedLocale)) {
+    return storedLocale;
+  }
+  return browserLanguages.some((language) => language.toLowerCase().startsWith("ja")) ? "ja" : "en";
+}
+
+export function setActiveLocale(locale: SupportedLocale): void {
+  activeLocale = locale;
+}
+
+export function getActiveLocale(): SupportedLocale {
+  return activeLocale;
+}
+
+export function localeTag(locale: SupportedLocale = activeLocale): string {
+  return locale === "ja" ? "ja-JP" : "en-US";
+}
+
+export function t(
+  key: TranslationKey,
+  values: Readonly<Record<string, string | number>> = {},
+): string {
+  const template = (activeLocale === "ja" ? JAPANESE_MESSAGES : ENGLISH_MESSAGES)[key];
+  return template.replace(/\{([a-zA-Z0-9]+)\}/g, (match, name: string) =>
+    values[name] === undefined ? match : String(values[name]),
+  );
+}
+
+export function isSupportedLocale(value: unknown): value is SupportedLocale {
+  return value === "ja" || value === "en";
+}
+
+export interface LocaleStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+export function loadLocale(
+  storage: LocaleStorage | null,
+  browserLanguages: readonly string[],
+): SupportedLocale {
+  let storedLocale: string | null = null;
+  try {
+    storedLocale = storage?.getItem(LOCALE_STORAGE_KEY) ?? null;
+  } catch {
+    // A blocked storage backend must not prevent the UI from starting.
+  }
+  return resolveLocale(storedLocale, browserLanguages);
+}
+
+export function saveLocale(storage: LocaleStorage | null, locale: SupportedLocale): void {
+  try {
+    storage?.setItem(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // The selected locale still applies to the current page through reload fallback behavior.
+  }
+}
+
+export function applyDocumentTranslations(root: Document, locale: SupportedLocale): void {
+  setActiveLocale(locale);
+  root.documentElement.lang = locale;
+  for (const element of root.querySelectorAll<HTMLElement>("[data-i18n]")) {
+    const key = element.dataset.i18n;
+    if (key !== undefined && key in ENGLISH_MESSAGES) {
+      element.textContent = t(key as TranslationKey);
+    }
+  }
+  applyTranslatedAttribute(root, "data-i18n-title", "title");
+  applyTranslatedAttribute(root, "data-i18n-aria-label", "aria-label");
+  applyTranslatedAttribute(root, "data-i18n-placeholder", "placeholder");
+  applyTranslatedAttribute(root, "data-i18n-content", "content");
+}
+
+function applyTranslatedAttribute(
+  root: Document,
+  dataAttribute: string,
+  targetAttribute: string,
+): void {
+  for (const element of root.querySelectorAll<HTMLElement>(`[${dataAttribute}]`)) {
+    const key = element.getAttribute(dataAttribute);
+    if (key !== null && key in ENGLISH_MESSAGES) {
+      element.setAttribute(targetAttribute, t(key as TranslationKey));
+    }
+  }
+}

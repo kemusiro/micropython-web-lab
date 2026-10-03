@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "org.example.local-ssd1331",
+  "version": "0.1.0",
+  "deviceApiVersion": 1,
+  "name": "Local SSD1331 Fixture",
+  "description": "Local multi-device SPI fixture modeled after an SSD1331",
+  "license": "MIT",
+  "entrypoint": "./src/device.js",
+  "requires": {
+    "boardCapabilities": ["spi-controller-v1", "digital-gpio-v1"]
+  },
+  "ports": [
+    { "id": "spi", "kind": "spi-target" },
+    { "id": "cs", "kind": "gpio-observer" },
+    { "id": "dc", "kind": "gpio-observer" },
+    { "id": "reset", "kind": "gpio-observer" }
+  ]
+}

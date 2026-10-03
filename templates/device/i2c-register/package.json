@@ -1,0 +1,8 @@
+{
+  "name": "micropython-web-lab-i2c-device-template",
+  "version": "0.1.0-preview.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "dependencies": {}
+}

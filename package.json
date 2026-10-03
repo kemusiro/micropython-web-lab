@@ -1,0 +1,43 @@
+{
+  "name": "micropython-web-lab",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:device": "pnpm build:sdk && node scripts/dev-device.mjs",
+    "dev:devices": "pnpm build:sdk && node scripts/dev-devices.mjs",
+    "preview": "vite preview",
+    "build:device-template": "tsc -p templates/device/i2c-register/tsconfig.json",
+    "build:sdk": "tsc -p packages/device-api/tsconfig.json && tsc -p packages/device-api/tsconfig.consumer.json && tsc -p packages/device-testkit/tsconfig.json && node scripts/verify-device-sdk.mjs",
+    "build": "pnpm build:sdk && tsc --noEmit && vite build && node scripts/verify-managed-build.mjs",
+    "test:headers": "node scripts/verify-security-headers.mjs",
+    "test:runtime": "node scripts/verify-micropython-runtime.mjs",
+    "test:notices": "node scripts/verify-third-party-notices.mjs",
+    "test": "pnpm build:sdk && vitest run src packages/device-api/src packages/device-testkit/src templates/device",
+    "test:e2e": "playwright test",
+    "test:e2e:local-device": "playwright test --config playwright.local-device.config.ts",
+    "test:e2e:local-devices": "playwright test --config playwright.local-devices.config.ts",
+    "check:device": "node scripts/check-device.mjs",
+    "check:devices": "pnpm build:sdk && node scripts/check-devices.mjs",
+    "verify:device-template": "pnpm build:sdk && pnpm build:device-template && pnpm check:device -- templates/device/i2c-register",
+    "verify:local-devices": "pnpm check:devices -- fixtures/local-devices/bme280-ssd1331/web-lab.local.json",
+    "verify:local-device-errors": "pnpm build:sdk && node scripts/verify-local-device-errors.mjs",
+    "check": "pnpm test:headers && pnpm test:runtime && pnpm test:notices && pnpm test && pnpm build && pnpm verify:device-template && pnpm verify:local-devices && pnpm verify:local-device-errors && pnpm test:e2e && pnpm test:e2e:local-device && pnpm test:e2e:local-devices"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@micropython-web-lab/device-api": "workspace:*",
+    "@micropython-web-lab/device-testkit": "workspace:*",
+    "@playwright/test": "1.62.1",
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": "22.23.2",
+    "pnpm": "11.19.0"
+  },
+  "packageManager": "pnpm@11.19.0"
+}

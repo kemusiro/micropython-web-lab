@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "org.example.i2c-register-template",
+  "version": "0.1.0",
+  "deviceApiVersion": 1,
+  "name": "I2C Register Template",
+  "description": "Minimal I2C register device for local Device API development",
+  "license": "MIT",
+  "entrypoint": "./dist/device.js",
+  "requires": {
+    "boardCapabilities": ["i2c-controller-v1"]
+  },
+  "ports": [
+    {
+      "id": "i2c",
+      "kind": "i2c-target",
+      "defaultAddress": 72
+    }
+  ]
+}
