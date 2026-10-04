@@ -10,10 +10,10 @@ const workspaceDependencies = {
 };
 
 const thirdPartyDependencies = {
-  "@playwright/test": { version: "1.62.1", license: "Apache-2.0" },
+  "@playwright/test": { version: "1.63.0", license: "Apache-2.0" },
   typescript: { version: "7.0.2", license: "Apache-2.0" },
-  vite: { version: "8.2.2", license: "MIT" },
-  vitest: { version: "4.1.11", license: "MIT" },
+  vite: { version: "8.3.1", license: "MIT" },
+  vitest: { version: "5.0.3", license: "MIT" },
 };
 
 const runtimeDependencies = Object.keys(packageJson.dependencies ?? {});

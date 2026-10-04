@@ -39,10 +39,10 @@ Emscriptenの上流LICENSEには、Emscriptenが利用するNode.js由来コー�
 
 | Package | Version | License | Purpose |
 | --- | --- | --- | --- |
-| `@playwright/test` | 1.62.1 | Apache-2.0 | Browser end-to-end tests |
+| `@playwright/test` | 1.63.0 | Apache-2.0 | Browser end-to-end tests |
 | `typescript` | 7.0.2 | Apache-2.0 | Type checking and compilation |
-| `vite` | 8.2.2 | MIT | Development server and production bundling |
-| `vitest` | 4.1.11 | MIT | Unit and integration tests |
+| `vite` | 8.3.1 | MIT | Development server and production bundling |
+| `vitest` | 5.0.3 | MIT | Unit and integration tests |
 
 `pnpm-lock.yaml`にはこれらが解決する推移的な開発依存関係も記録される。各パッケージの正確なライセンス
 本文と追加通知は、固定バージョンの配布パッケージを参照する。`scripts/verify-third-party-notices.mjs`は、
