@@ -166,6 +166,28 @@ describe("RuntimeClient", () => {
     expect(statuses).toEqual(["starting", "ready", "starting"]);
   });
 
+  it("bounds recovery for Worker loading errors without a message", () => {
+    const firstWorker = new FakeWorker();
+    const secondWorker = new FakeWorker();
+    const workers = [firstWorker, secondWorker];
+    const onMessage = vi.fn();
+    const client = new RuntimeClient(
+      { onMessage, onStatus: vi.fn() },
+      () => workers.shift()!,
+    );
+    client.start();
+    // A failed module-worker fetch can dispatch Event, not ErrorEvent.
+    firstWorker.onerror?.(new Event("error") as ErrorEvent);
+    expect(firstWorker.terminate).toHaveBeenCalledOnce();
+    secondWorker.onerror?.(new Event("error") as ErrorEvent);
+    expect(secondWorker.terminate).toHaveBeenCalledOnce();
+    expect(client.status).toBe("error");
+    expect(onMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: "error",
+      message: expect.stringContaining("短時間に繰り返し失敗"),
+    }));
+  });
+
   it("also recovers when a worker message cannot be deserialized", () => {
     const firstWorker = new FakeWorker();
     const secondWorker = new FakeWorker();

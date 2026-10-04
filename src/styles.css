@@ -1347,7 +1347,8 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
   .toolbar { grid-area: toolbar; }
   .editor-panel {
     grid-area: editor;
-    grid-template-rows: auto auto minmax(7rem, 1fr) auto auto;
+    /* Let the code area shrink when platform fonts wrap the toolbars. */
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
     gap: 0.25rem;
     min-height: 0;
     overflow: hidden;

@@ -51,6 +51,9 @@ Node.jsとpnpmはプロジェクトで固定した版を使用します。グロ
 ./scripts/use-node.sh pnpm test:e2e
 ```
 
+製品版Chrome・Edge・Firefox・SafariとOS別の確認方法は
+[ブラウザとOSの検証](docs/browser-compatibility.md)を参照してください。
+
 ## 静的配信
 
 さくらのレンタルサーバ向けには`./scripts/use-node.sh pnpm build:sakura`で配信用成果物を生成します。

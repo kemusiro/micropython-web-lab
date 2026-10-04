@@ -746,6 +746,19 @@ test("opens device samples in persistent editor tabs without replacing existing 
     panelBox!.y + panelBox!.height + 1,
   );
 
+  // Windows fonts can increase toolbar line boxes; keep actions inside the panel.
+  await page.locator(".editor-panel").evaluate((element: HTMLElement) => {
+    element.style.lineHeight = "1.8";
+  });
+  const tallerPanel = await page.locator(".editor-panel").boundingBox();
+  const tallerActions = await page.locator(".editor-actions").boundingBox();
+  expect(tallerActions!.y + tallerActions!.height).toBeLessThanOrEqual(
+    tallerPanel!.y + tallerPanel!.height + 1,
+  );
+  await page.locator(".editor-panel").evaluate((element: HTMLElement) => {
+    element.style.lineHeight = "";
+  });
+
   await tabs.getByRole("tab", { name: "main.py" }).click();
   await expect(editor).toHaveValue('print("keep this program")');
   await tabs.getByRole("tab", { name: "内蔵LED サンプル" }).click();
@@ -786,13 +799,16 @@ test("runs a multi-device interactive example from the scenario gallery", async 
   await expect(terminal).toContainText("Interactive lamp: press GPIO 15 to change color");
 
   const button = buttonCard.getByRole("button", { name: "GP15" });
-  await button.click();
+  // The example polls a momentary input. Hold it until sampled on slower hosts.
+  await button.focus();
+  await page.keyboard.down("Space");
   await expect(
     onboardLedCard.locator('[data-device-component="output"] output'),
   ).toHaveText("点灯");
   await expect(rgbCard.locator('[data-device-component="hex-color"] output')).toHaveText(
     "#ff0000",
   );
+  await page.keyboard.up("Space");
 
   await expect(terminal).toContainText("Color: red");
   await expect(terminal).toContainText("Interactive lamp complete", { timeout: 10_000 });
