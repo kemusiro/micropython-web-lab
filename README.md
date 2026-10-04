@@ -47,6 +47,11 @@ Node.jsとpnpmはプロジェクトで固定した版を使用します。グロ
 ./scripts/use-node.sh pnpm test:e2e
 ```
 
+## 静的配信
+
+さくらのレンタルサーバ向けには`./scripts/use-node.sh pnpm build:sakura`で配信用成果物を生成します。
+Basic認証で制限したリハーサルにも対応します。配置、HTTPS設定、公開後の検証は[配信手順](docs/deployment.md)を参照してください。
+
 ## セキュリティとプライバシー
 
 MicroPythonコードはブラウザ内で実行し、通常の利用ではエディタ内容やREPL履歴をサーバーへ送信しません。

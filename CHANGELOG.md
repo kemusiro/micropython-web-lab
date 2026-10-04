@@ -10,6 +10,8 @@ Device APIは、公開アルファまでに変更または削除される場合�
 
 ### Added
 
+- さくらのレンタルサーバ向けビルド、Apache配信設定の生成、Basic認証付きリハーサル対応の公開URL検証コマンドと配信手順
+
 - ブラウザ内のDedicated Web Workerで動作するMicroPython v1.28.0 REPL
 - 複数タブのコードエディタ、通常実行、pdb互換のデバッグ実行
 - 停止、Worker再生成、実行時間・出力量制限による復旧
