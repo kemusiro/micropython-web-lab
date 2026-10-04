@@ -1,7 +1,8 @@
 import { defineConfig } from "@playwright/test";
 import base from "./playwright.config";
 
-export default defineConfig(base, {
+export default defineConfig({
+  ...base,
   workers: 1,
   reporter: [["list"], ["json", { outputFile: "test-results/compatibility.json" }]],
   projects: [
