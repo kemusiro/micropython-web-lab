@@ -49,6 +49,8 @@ import {
 } from "./protocol";
 import { SharedDebuggerChannel, type DebuggerChannelTransfer } from "./debugger-channel";
 import { WEB_LAB_PDB_SOURCE } from "./pdb-module";
+import { RuntimeOutputBuffer } from "./output-buffer";
+import { processReplInput } from "./repl-input";
 import { recoverReplFromBridgeError } from "./repl-bridge-error";
 import type { ConnectionGraphV1 } from "../connections/connection-model";
 import { localDeviceBundle } from "virtual:local-device";
@@ -60,6 +62,10 @@ let activeDeviceHost: DeviceHost | null = null;
 let debuggerChannel: SharedDebuggerChannel | null = null;
 let activeDebuggerRequestId: string | null = null;
 let starting = false;
+const output = new RuntimeOutputBuffer(
+  (type, data) => self.postMessage({ version: RUNTIME_PROTOCOL_VERSION, type, data }),
+  () => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "output-limit" }),
+);
 
 self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
   const message = event.data;
@@ -236,8 +242,16 @@ async function startRuntime(
     micropython = await loadMicroPython({
       heapsize: 1024 * 1024,
       linebuffer: false,
-      stdout: (bytes) => postOutput("stdout", stdoutDecoder.decode(bytes, { stream: true })),
-      stderr: (bytes) => postOutput("stderr", stderrDecoder.decode(bytes, { stream: true })),
+      stdout: (bytes) => {
+        if (!output.exhausted) {
+          postOutput("stdout", stdoutDecoder.decode(bytes, { stream: true }));
+        }
+      },
+      stderr: (bytes) => {
+        if (!output.exhausted) {
+          postOutput("stderr", stderrDecoder.decode(bytes, { stream: true }));
+        }
+      },
     });
 
     const builtins = micropython.pyimport<{
@@ -331,25 +345,22 @@ function processInput(data: string): void {
     return;
   }
 
-  const normalized = data
-    .replaceAll("\r\n", "\n")
-    .replaceAll("\r", "\n")
-    .replaceAll("\n", "\r");
-  const bytes = new TextEncoder().encode(normalized);
-
+  output.beginOperation();
   try {
-    if (normalized.includes("\x04")) {
-      activeDeviceHost?.resetAll();
-    }
-    for (const byte of bytes) {
-      micropython.replProcessChar(byte);
-    }
+    processReplInput(
+      micropython,
+      data,
+      () => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-reset" }),
+      () => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-executing" }),
+    );
   } catch (error) {
     try {
       recoverReplFromBridgeError(micropython, error, (data) => postOutput("stderr", data));
     } catch (recoveryError) {
       postError(`REPL recovery failed: ${formatError(recoveryError)}`);
     }
+  } finally {
+    output.flush();
   }
 }
 
@@ -386,6 +397,7 @@ function processScript(
     return;
   }
 
+  output.beginOperation();
   try {
     if (mode === "debug") {
       if (debuggerChannel === null) {
@@ -466,9 +478,7 @@ function parseDebuggerVariables(value: unknown): readonly DebuggerVariable[] {
 }
 
 function postOutput(type: "stdout" | "stderr", data: string): void {
-  if (data.length > 0) {
-    postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type, data });
-  }
+  output.write(type, data);
 }
 
 function postError(message: string): void {
@@ -486,6 +496,7 @@ function postExecutionResult(requestId: string, ok: boolean, error?: string): vo
 }
 
 function postMessageToMain(message: WorkerToMainMessage): void {
+  output.flush();
   self.postMessage(message);
 }
 

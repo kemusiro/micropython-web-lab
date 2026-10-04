@@ -4,6 +4,10 @@ import { RUNTIME_PROTOCOL_VERSION, isWorkerToMainMessage } from "./protocol";
 
 describe("isWorkerToMainMessage", () => {
   it("accepts valid runtime messages", () => {
+    for (const type of ["repl-reset", "repl-executing", "output-limit"]) {
+      expect(isWorkerToMainMessage({ version: RUNTIME_PROTOCOL_VERSION, type })).toBe(true);
+      expect(isWorkerToMainMessage({ version: RUNTIME_PROTOCOL_VERSION - 1, type })).toBe(false);
+    }
     expect(
       isWorkerToMainMessage({
         version: RUNTIME_PROTOCOL_VERSION,

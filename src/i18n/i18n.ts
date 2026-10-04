@@ -199,6 +199,7 @@ const ENGLISH_MESSAGES = {
   "system.debuggerCommandError": "\n[system] Could not send debugger command: {message}\n",
   "system.debuggerWait": "\n[system] Wait until the debugger is ready for a command.\n",
   "system.debuggerQuit": "[system] Ending debug execution and recreating the Worker.\n",
+  "system.softReset": "\n[system] Soft reset: recreating the Worker and clearing Python state.\n",
   "system.interrupt":
     "\n^C\n[system] Interrupting running code and recreating the Worker. REPL state will be reset.\n",
   "system.enterCode": "\n[system] Enter code to run.\n",
@@ -360,6 +361,7 @@ const JAPANESE_MESSAGES: Record<TranslationKey, string> = {
   "system.debuggerCommandError": "\n[system] デバッガコマンドを送信できません: {message}\n",
   "system.debuggerWait": "\n[system] デバッガがコマンド待ちになるまでお待ちください。\n",
   "system.debuggerQuit": "[system] デバッグ実行を終了し、Workerを再生成しています。\n",
+  "system.softReset": "\n[system] ソフトリセット: Workerを再生成し、Pythonの状態を初期化します。\n",
   "system.interrupt": "\n^C\n[system] 実行中のコードを強制停止し、Workerを再生成しています。REPLの状態は初期化されます。\n",
   "system.enterCode": "\n[system] 実行するコードを入力してください。\n",
   "system.debugIsolation": "\n[system] デバッグ実行にはクロスオリジン分離が必要です。\n",

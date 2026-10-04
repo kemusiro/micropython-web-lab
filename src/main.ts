@@ -148,6 +148,7 @@ if (__WEB_LAB_LOCAL_MODE__) {
 }
 
 const terminalScreen = new TerminalScreen();
+let terminalFrame: number | null = null;
 let terminalInputComposing = false;
 let replExecutionPending = false;
 let autosaveTimer: number | null = null;
@@ -571,7 +572,7 @@ function sendDirectTerminalInput(data: string): void {
     appendTerminal(t("system.directInputUnavailable"));
     return;
   }
-  if (data.includes("\r") || data.includes("\n")) {
+  if (data.includes("\r") || data.includes("\n") || data.includes("\x04")) {
     replExecutionPending = true;
   }
 }
@@ -849,10 +850,12 @@ function handleRuntimeMessage(message: WorkerToMainMessage): void {
       replExecutionPending = false;
       runtimeVersion.textContent = `${compactVersion(message.micropythonVersion)} · restricted · ${message.runtimeBuild.sourceCommit.slice(0, 7)}`;
       break;
+    case "repl-reset":
+      appendTerminal(t("system.softReset"));
+      break;
     case "stdout":
       optionalContentIntegration.stdout(message.data);
       appendTerminal(message.data);
-      updateReplExecutionState();
       break;
     case "stderr":
       appendTerminal(message.data);
@@ -1134,6 +1137,16 @@ function updateReplExecutionState(): void {
 
 function appendTerminal(data: string): void {
   terminalScreen.write(data);
+  if (terminalFrame === null) {
+    terminalFrame = requestAnimationFrame(() => {
+      terminalFrame = null;
+      renderTerminal();
+      updateReplExecutionState();
+    });
+  }
+}
+
+function renderTerminal(): void {
   if (terminalScreen.text.length > MAX_TERMINAL_CHARACTERS) {
     terminalScreen.replace(
       t("system.oldOutputOmitted", {
@@ -1141,10 +1154,6 @@ function appendTerminal(data: string): void {
       }),
     );
   }
-  renderTerminal();
-}
-
-function renderTerminal(): void {
   const contents = terminalScreen.text;
   const cursorOffset = terminalScreen.cursorOffset;
   terminalText.textContent = contents.slice(0, cursorOffset);
