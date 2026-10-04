@@ -786,13 +786,16 @@ test("runs a multi-device interactive example from the scenario gallery", async 
   await expect(terminal).toContainText("Interactive lamp: press GPIO 15 to change color");
 
   const button = buttonCard.getByRole("button", { name: "GP15" });
-  await button.click();
+  // The example polls a momentary input. Hold it until sampled on slower hosts.
+  await button.focus();
+  await page.keyboard.down("Space");
   await expect(
     onboardLedCard.locator('[data-device-component="output"] output'),
   ).toHaveText("点灯");
   await expect(rgbCard.locator('[data-device-component="hex-color"] output')).toHaveText(
     "#ff0000",
   );
+  await page.keyboard.up("Space");
 
   await expect(terminal).toContainText("Color: red");
   await expect(terminal).toContainText("Interactive lamp complete", { timeout: 10_000 });

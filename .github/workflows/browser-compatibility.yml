@@ -28,7 +28,7 @@ jobs:
           corepack enable
           pnpm install --frozen-lockfile
       - name: Chrome and Edge full managed-build suite
-        run: pnpm exec playwright test --config playwright.compatibility.config.ts
+        run: pnpm exec playwright test --config playwright.compatibility.config.ts --max-failures=4
       - name: Install pinned Firefox driver
         if: always()
         shell: pwsh
