@@ -165,7 +165,8 @@ export class RuntimeClient {
         return;
       }
       this.#recoverFromUnexpectedWorkerFailure(
-        event.message.trim(),
+        // Module-worker fetch failures may emit a plain Event without message.
+        typeof event.message === "string" ? event.message.trim() : "",
         "Workerで予期しないエラーが発生しました。",
       );
     };
