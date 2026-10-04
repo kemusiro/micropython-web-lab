@@ -9,8 +9,13 @@ test("does not mount private optional content in the managed build", async ({ pa
 test("switches the complete managed UI to English and remembers the locale", async ({ page }) => {
   await page.goto("/");
 
+  await expect(page.getByText("公開α", { exact: true })).toBeVisible();
+  await expect(page.getByText("大切なコードは別の場所にも保存してください。", { exact: false })).toBeVisible();
+
   await page.locator("#language-select").selectOption("en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByText("Public alpha", { exact: true })).toBeVisible();
+  await expect(page.getByText("Keep a separate copy of important code.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Run script" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Virtual board and devices" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Built-in LED" })).toBeVisible();

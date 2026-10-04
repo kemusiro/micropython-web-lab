@@ -10,6 +10,8 @@ Device APIは、公開アルファまでに変更または削除される場合�
 
 ### Added
 
+- 公開α表示、ブラウザ保存の注意、検証済みOS・製品版ブラウザの対応表
+
 - さくらのレンタルサーバ向けビルド、Apache配信設定の生成、Basic認証付きリハーサル対応の公開URL検証コマンドと配信手順
 
 - ブラウザ内のDedicated Web Workerで動作するMicroPython v1.28.0 REPL
