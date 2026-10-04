@@ -1,3 +1,4 @@
+import { MAX_RUNTIME_OUTPUT_CHARACTERS } from "./output-buffer";
 import {
   RUNTIME_PROTOCOL_VERSION,
   isWorkerToMainMessage,
@@ -11,7 +12,7 @@ import type { ScriptExecutionMode } from "./protocol";
 import type { ConnectionGraphV1 } from "../connections/connection-model";
 
 export const MAX_RUNTIME_EXECUTION_MS = 10_000;
-export const MAX_RUNTIME_OUTPUT_CHARACTERS = 100_000;
+export { MAX_RUNTIME_OUTPUT_CHARACTERS } from "./output-buffer";
 export const UNEXPECTED_WORKER_RECOVERY_WINDOW_MS = 30_000;
 export const MAX_UNEXPECTED_WORKER_AUTO_RECOVERIES = 1;
 
@@ -92,6 +93,24 @@ export class RuntimeClient {
 
       if (!isWorkerToMainMessage(event.data)) {
         this.#reportClientError("Workerから不正なメッセージを受信しました。");
+        return;
+      }
+
+      if (event.data.type === "repl-executing") {
+        // Earlier prompts may arrive after the next input was queued. Arm the
+        // timer again when the Worker actually starts processing that input.
+        this.#beginOperation("repl");
+        return;
+      }
+      if (event.data.type === "repl-reset") {
+        this.#handlers.onMessage(event.data);
+        this.start();
+        return;
+      }
+      if (event.data.type === "output-limit") {
+        this.#recoverFromLimit(
+          `出力量が${MAX_RUNTIME_OUTPUT_CHARACTERS.toLocaleString("ja-JP")}文字の上限を超えたため、Workerを再生成しました。`,
+        );
         return;
       }
 
@@ -199,7 +218,7 @@ export class RuntimeClient {
       type: "input",
       data,
     });
-    if (data.includes("\r") || data.includes("\n")) {
+    if (data.includes("\r") || data.includes("\n") || data.includes("\x04")) {
       this.#beginOperation("repl");
     }
     return true;

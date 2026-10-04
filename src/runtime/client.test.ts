@@ -497,3 +497,57 @@ describe("RuntimeClient", () => {
     }
   });
 });
+
+describe("Worker reset and output-limit control messages", () => {
+  for (const type of ["repl-reset", "output-limit"] as const) {
+    it(`replaces the worker on ${type}, preserves start options and ignores late output`, () => {
+      const first = new FakeWorker();
+      const second = new FakeWorker();
+      const workers = [first, second];
+      const onMessage = vi.fn();
+      const deviceInputs = SharedDeviceInputs.create(WEB_LAB_DEVICE_INPUT_LAYOUT)!.toTransfer();
+      const client = new RuntimeClient({ onMessage, onStatus: vi.fn() }, () => workers.shift()!, {
+        deviceInputs, connectionGraph: MANAGED_CONNECTION_GRAPH,
+      });
+      client.start();
+      first.emit(readyMessage);
+      const late = first.onmessage!;
+      first.emit({ version: RUNTIME_PROTOCOL_VERSION, type });
+      expect(first.terminate).toHaveBeenCalledOnce();
+      expect(client.status).toBe("starting");
+      expect(second.postMessage).toHaveBeenCalledWith({
+        version: RUNTIME_PROTOCOL_VERSION, type: "start", deviceInputs,
+        connectionGraph: MANAGED_CONNECTION_GRAPH,
+      });
+      onMessage.mockClear();
+      late({ data: { version: RUNTIME_PROTOCOL_VERSION, type: "stdout", data: "stale" } } as MessageEvent);
+      expect(onMessage).not.toHaveBeenCalled();
+      second.emit(readyMessage);
+      expect(client.sendInput("print(42)\n")).toBe(true);
+    });
+  }
+});
+
+
+it("rearms the REPL timer after a queued earlier prompt cleared it", () => {
+  vi.useFakeTimers();
+  try {
+    const first = new FakeWorker();
+    const second = new FakeWorker();
+    const workers = [first, second];
+    const client = new RuntimeClient(
+      { onMessage: vi.fn(), onStatus: vi.fn() },
+      () => workers.shift()!,
+    );
+    client.start();
+    first.emit(readyMessage);
+    client.sendInput("\x04");
+    first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "stdout", data: "\r\n... " });
+    first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-executing" });
+    vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS);
+    expect(first.terminate).toHaveBeenCalledOnce();
+    expect(client.status).toBe("starting");
+  } finally {
+    vi.useRealTimers();
+  }
+});

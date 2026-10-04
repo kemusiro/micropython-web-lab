@@ -16,7 +16,7 @@ import {
   type DeviceStateEvent,
 } from "../device-api/types";
 
-export const RUNTIME_PROTOCOL_VERSION = 12 as const;
+export const RUNTIME_PROTOCOL_VERSION = 13 as const;
 export const MAX_SCRIPT_CHARACTERS = 200_000;
 export const MAX_DEBUGGER_GLOBALS = 100;
 export const MAX_DEBUGGER_VARIABLE_NAME_CHARACTERS = 128;
@@ -59,6 +59,7 @@ export type MainToWorkerMessage =
     };
 
 export type WorkerToMainMessage =
+  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "repl-reset" | "repl-executing" | "output-limit" }
   | {
       version: typeof RUNTIME_PROTOCOL_VERSION;
       type: "ready";
@@ -117,6 +118,10 @@ export function isWorkerToMainMessage(value: unknown): value is WorkerToMainMess
   }
 
   switch (value.type) {
+    case "repl-executing":
+    case "repl-reset":
+    case "output-limit":
+      return true;
     case "ready":
       return (
         typeof value.micropythonVersion === "string" &&
