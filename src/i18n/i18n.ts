@@ -8,6 +8,9 @@ const ENGLISH_MESSAGES = {
   "language.label": "Language",
   "hero.description":
     "An experimental environment for editing and running MicroPython code in a dedicated browser Worker.",
+  "alpha.badge": "Public alpha",
+  "alpha.notice":
+    "This release is under technical evaluation. The UI, features, and browser storage format may change. Keep a separate copy of important code.",
   "runtime.starting": "Starting",
   "runtime.loading": "Loading MicroPython",
   "runtime.ready": "Ready",
@@ -226,6 +229,8 @@ const JAPANESE_MESSAGES: Record<TranslationKey, string> = {
   "meta.description": "ブラウザ内のWeb Workerで動作するMicroPythonコードエディタとREPL",
   "language.label": "表示言語",
   "hero.description": "MicroPythonのコードをブラウザ内の専用Workerで編集・実行できる実験環境です。",
+  "alpha.badge": "公開α",
+  "alpha.notice": "技術評価中です。画面・機能・ブラウザ保存形式は変更される可能性があります。大切なコードは別の場所にも保存してください。",
   "runtime.starting": "起動中", "runtime.loading": "MicroPythonを読み込んでいます",
   "runtime.ready": "実行可能", "runtime.executing": "スクリプト実行中",
   "runtime.debugging": "デバッガ停止中", "runtime.stopped": "停止中", "runtime.error": "エラー",

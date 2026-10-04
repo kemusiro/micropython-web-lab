@@ -83,6 +83,36 @@ h1 {
 h2 { margin-bottom: 0; font-size: 1.25rem; }
 .lede { max-width: 43rem; margin-bottom: 0; color: #526058; }
 
+.product-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.8rem;
+  margin-bottom: 0.4rem;
+}
+
+.product-title h1 { margin-bottom: 0; }
+
+.alpha-badge {
+  border: 1px solid #9a641f;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  color: #69400d;
+  background: #fff1cf;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.alpha-note {
+  max-width: 48rem;
+  margin: 0.55rem 0 0;
+  color: #69400d;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .hero-actions {
   display: grid;
   flex: 0 0 auto;

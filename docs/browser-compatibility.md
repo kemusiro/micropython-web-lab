@@ -1,7 +1,22 @@
 # ブラウザとOSの検証
 
-公開αの対象OS候補はWindowsとmacOSとする。実行した環境と未確認の環境を区別し、
-ブラウザエンジンのテストだけで製品版ブラウザの対応を宣言しない。
+公開αの対応対象はWindows 11とApple Silicon Mac上のmacOSとする。Intel Macはサポート対象外である。
+実行した環境と未確認の環境を区別し、ブラウザエンジンのテストだけで製品版ブラウザの対応を宣言しない。
+
+## 公開αの対応表
+
+2026-10-04に、Basic認証下の固定コミット`9002eab`で次の製品版ブラウザを確認した。
+
+| OS・CPU | ブラウザ | 確認した版 | 実URLで確認した範囲 |
+| --- | --- | --- | --- |
+| Windows 11 x64 | Chrome | 154.0.8037.97 | 起動、レイアウト、スクリプト、ADC入力、Worker再生成 |
+| Windows 11 x64 | Edge | 154.0.4258.53 | 起動、レイアウト、スクリプト、ADC入力、Worker再生成 |
+| macOS arm64 | Chrome | 154.0.8037.93 | 管理版の機能・配信検証48項目 |
+| macOS arm64 | Firefox | 157.0 | 起動、共有入力、ソフトリセット、UART、BME280、失敗表示と復旧 |
+| macOS arm64 | Safari | 26.6.2 | 起動、ADC・LED、ソフトリセット、Python例外表示と復旧 |
+
+Windows Server 2025のGitHub ActionsではChrome／Edgeの管理版E2E 51項目とFirefoxの製品版検証10項目も
+実行している。このCI結果はWindows 11実機の確認を補うが、実機確認の代替とは扱わない。
 
 ## ChromeとEdge
 
@@ -57,8 +72,8 @@ Unix専用の`use-node.sh`に代わり、この使い捨てWindowsランナー�
 OS・ブラウザ版とテスト結果は`windows-browser-compatibility-chrome-edge`と
 `windows-browser-compatibility-firefox` artifactへ保存する。
 
-Windows Serverの仮想マシンでの合格は、Windows 11実機、IME、タッチ、GPU依存描画の確認を
-意味しない。macOSの一つの版・CPUでの合格も他の版やIntel Macへ一般化しない。
+Windows 11実機ではIME合成、タッチ、GPU依存描画を確認していない。macOSの結果は確認したarm64環境の
+範囲であり、Intel Macへ一般化しない。Intel Macは公開αのサポート対象外とする。
 実URLのHTTPS、認証、ヘッダー、ファイルハッシュは[配信手順](deployment.md)で別途確認する。
 公開αの正式な対応表には、実行結果のある具体的な環境だけを記載する。
 
