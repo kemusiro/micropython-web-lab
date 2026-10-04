@@ -87,10 +87,15 @@ try {
     await output("adc-wait 0"); await rangeEnd(adc, true); await output("adc-live 65535"); await ready();
   });
   await check("live GPIO shared input", async () => {
+    const selector = '[data-device-instance="button-gp15"] [data-device-component="press"] button';
+    await js('document.querySelector(arguments[0]).scrollIntoView({block:"center"})', selector);
+    const button = await element(selector);
     await run('from machine import Pin\nbutton = Pin(15, Pin.IN, Pin.PULL_UP)\nprint("gpio-wait")\nwhile button.value():\n    pass\nprint("gpio-live", button.value())');
     await output("gpio-wait");
-    await js('document.querySelector(\'[data-device-instance="button-gp15"] [data-device-component="press"] button\').focus()');
-    await keys([{ type: "keyDown", value: " " }]);
+    await call("/actions", { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+      { type: "pointerMove", duration: 0, origin: { "element-6066-11e4-a52e-4f735466cecf": button }, x: 0, y: 0 },
+      { type: "pointerDown", button: 0 },
+    ] }] });
     try { await output("gpio-live 0"); } finally { await call("/actions", undefined, "DELETE"); }
     await ready();
   });
@@ -150,7 +155,7 @@ try {
   });
 } catch (error) {
   report.error = error.message;
-  if (session) report.failureState = await js('return {status:document.querySelector("#runtime-status")?.textContent, terminal:document.querySelector("#terminal")?.textContent}').catch(() => null);
+  if (session) report.failureState = await js('return {status:document.querySelector("#runtime-status")?.textContent, terminal:document.querySelector("#terminal")?.textContent, pressed:document.querySelector(\'[data-device-component="press"] button\')?.dataset.pressed}').catch(() => null);
   console.error(error.message);
   process.exitCode = 1;
 } finally {

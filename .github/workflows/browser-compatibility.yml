@@ -10,8 +10,12 @@ permissions:
 
 jobs:
   windows:
-    name: Windows native browsers
+    name: Windows ${{ matrix.suite }}
     runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [chrome-edge, firefox]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,9 +32,10 @@ jobs:
           corepack enable
           pnpm install --frozen-lockfile
       - name: Chrome and Edge full managed-build suite
+        if: matrix.suite == 'chrome-edge'
         run: pnpm exec playwright test --config playwright.compatibility.config.ts --max-failures=4
       - name: Install pinned Firefox driver
-        if: always()
+        if: matrix.suite == 'firefox'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force .cache/browser-coverage | Out-Null
@@ -39,7 +44,7 @@ jobs:
           if ($digest -ne 'dfed9315abe8d2fbc1b6161a2ee8002452e79cf05ee92fdc653a4e26bc35edd8') { throw 'Driver SHA-256 mismatch' }
           Expand-Archive .cache/browser-coverage/geckodriver.zip .cache/browser-coverage -Force
       - name: Firefox shared inputs, reset and failure recovery
-        if: always()
+        if: matrix.suite == 'firefox'
         shell: pwsh
         run: |
           pnpm build:sakura
@@ -57,7 +62,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: windows-browser-compatibility
+          name: windows-browser-compatibility-${{ matrix.suite }}
           path: |
             test-results/
             .cache/browser-coverage/*.log

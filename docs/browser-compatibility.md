@@ -54,7 +54,8 @@ WEB_LAB_BROWSER=safari WEB_LAB_WEBDRIVER=http://127.0.0.1:4445 \
 `Browser compatibility`ワークフローは`windows-2025`上でChrome、Edge、Firefoxを実行する。
 Unix専用の`use-node.sh`に代わり、この使い捨てWindowsランナーだけは`setup-node`とCorepackで
 `.node-version`と`packageManager`の固定版を使用する。Firefox driverも版とSHA-256を固定する。
-OS・ブラウザ版とテスト結果は`windows-browser-compatibility` artifactへ保存する。
+OS・ブラウザ版とテスト結果は`windows-browser-compatibility-chrome-edge`と
+`windows-browser-compatibility-firefox` artifactへ保存する。
 
 Windows Serverの仮想マシンでの合格は、Windows 11実機、IME、タッチ、GPU依存描画の確認を
 意味しない。macOSの一つの版・CPUでの合格も他の版やIntel Macへ一般化しない。
