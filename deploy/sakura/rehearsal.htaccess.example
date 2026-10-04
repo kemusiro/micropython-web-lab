@@ -1,0 +1,10 @@
+# Install as .htaccess in the PARENT of the deployment directory.
+# Replace the placeholder with a password file OUTSIDE every public directory.
+# Enable HTTPS forwarding in the Sakura control panel before using Basic auth.
+# Do not copy this file into dist or overwrite it when uploading dist contents.
+AuthType Basic
+AuthName "Web Lab rehearsal"
+AuthBasicProvider file
+AuthUserFile "/ABSOLUTE/PATH/OUTSIDE/DOCUMENT_ROOT/rehearsal.htpasswd"
+Require valid-user
+Options -Indexes
