@@ -5,18 +5,19 @@
 
 ## 公開αの対応表
 
-2026-10-04に、Basic認証下の固定コミット`9002eab`で次の製品版ブラウザを確認した。
+2026-10-04に、Basic認証下の固定コミット`24464a4`で次の製品版ブラウザを確認した。
 
 | OS・CPU | ブラウザ | 確認した版 | 実URLで確認した範囲 |
 | --- | --- | --- | --- |
-| Windows 11 x64 | Chrome | 154.0.8037.97 | 起動、レイアウト、スクリプト、ADC入力、Worker再生成 |
-| Windows 11 x64 | Edge | 154.0.4258.53 | 起動、レイアウト、スクリプト、ADC入力、Worker再生成 |
+| Windows 11 x64 | Chrome | 154.0.8037.97 | 公開α表示、起動、レイアウト、ADC入力、Worker再生成（8シナリオ） |
+| Windows 11 x64 | Edge | 154.0.4258.53 | 公開α表示、起動、レイアウト、ADC入力、Worker再生成（8シナリオ） |
 | macOS arm64 | Chrome | 154.0.8037.93 | 管理版の機能・配信検証48項目 |
-| macOS arm64 | Firefox | 157.0 | 起動、共有入力、ソフトリセット、UART、BME280、失敗表示と復旧 |
-| macOS arm64 | Safari | 26.6.2 | 起動、ADC・LED、ソフトリセット、Python例外表示と復旧 |
+| macOS arm64 | Firefox | 157.0 | 起動、共有入力、ソフトリセット、UART、BME280、失敗表示と復旧（7シナリオ） |
+| macOS arm64 | Safari | 26.6.2 | 公開α表示、起動、REPL、ソフトリセット、Python例外表示と復旧（4シナリオ） |
 
-Windows Server 2025のGitHub ActionsではChrome／Edgeの管理版E2E 51項目とFirefoxの製品版検証10項目も
-実行している。このCI結果はWindows 11実機の確認を補うが、実機確認の代替とは扱わない。
+同じ固定コミットについて、Windows Server 2025のGitHub ActionsではChrome／Edgeの管理版E2E 51項目と
+Firefoxの製品版検証10項目も完走した。このCI結果はWindows 11実機の確認を補うが、実機確認の代替とは
+扱わない。
 
 ## ChromeとEdge
 
