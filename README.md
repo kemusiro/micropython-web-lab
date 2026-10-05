@@ -1,5 +1,7 @@
 # MicroPython Web Lab
 
+**日本語** | [English](README.en.md)
+
 MicroPython Web Labは、ブラウザ内のDedicated Web WorkerでMicroPythonを実行する、非公式の開発・学習環境です。
 MicroPythonプロジェクト、MicroPython.org、Raspberry Pi Ltd、記載するデバイスメーカーの公式プロジェクト
 ではなく、各社との提携や承認を示すものではありません。
