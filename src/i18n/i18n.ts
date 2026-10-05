@@ -5,7 +5,6 @@ export const LOCALE_STORAGE_KEY = "micropython-web-lab:locale:v1";
 
 const ENGLISH_MESSAGES = {
   "meta.description": "A MicroPython code editor and REPL running in a Web Worker",
-  "language.label": "Language",
   "hero.description":
     "An experimental environment for editing and running MicroPython code in a dedicated browser Worker.",
   "alpha.badge": "Public alpha",
@@ -227,7 +226,6 @@ export type TranslationKey = keyof typeof ENGLISH_MESSAGES;
 
 const JAPANESE_MESSAGES: Record<TranslationKey, string> = {
   "meta.description": "ブラウザ内のWeb Workerで動作するMicroPythonコードエディタとREPL",
-  "language.label": "表示言語",
   "hero.description": "MicroPythonのコードをブラウザ内の専用Workerで編集・実行できる実験環境です。",
   "alpha.badge": "公開α",
   "alpha.notice": "技術評価中です。画面・機能・ブラウザ保存形式は変更される可能性があります。大切なコードは別の場所にも保存してください。",
