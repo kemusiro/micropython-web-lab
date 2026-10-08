@@ -113,7 +113,7 @@ try {
   });
   await check("sticky Stop remains available and recovers a running Worker", async () => {
     await run('while True: pass');
-    await until('document.querySelector("#status-indicator").dataset.status === "running"', "running");
+    await until('document.querySelector("#status-indicator").dataset.status === "executing"', "executing");
     await js('window.scrollTo(0,document.querySelector("#workspace").getBoundingClientRect().top + scrollY + 150)');
     await until('(() => {const r=document.querySelector("#stop-button").getBoundingClientRect(); return r.top>=0 && r.bottom<=innerHeight;})()', "sticky Stop visible");
     await click("#stop-button");
