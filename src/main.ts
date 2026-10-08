@@ -49,6 +49,7 @@ import {
 import { terminateReplInput } from "./runtime/repl-input";
 import { isInterruptShortcut, terminalSequenceForKey } from "./runtime/terminal-key-input";
 import { TerminalScreen } from "./runtime/terminal-screen";
+import { installWorkspaceViews } from "./layout/workspace-view";
 import { installWorkspaceResizers } from "./layout/workspace-layout";
 import {
   ANALOG_VALUE_INPUT_ID,
@@ -126,6 +127,21 @@ installWorkspaceResizers({
   terminalHeading,
   terminalShell,
   storage: browserStorage,
+});
+
+installWorkspaceViews({
+  workspace,
+  editorPanel: scriptForm,
+  editorCodeArea: requiredElement<HTMLElement>("editor-code-area"),
+  toolbar: requiredElement<HTMLElement>("workspace-toolbar"),
+  rowResizer: workspaceRowResizer,
+  terminalHeading,
+  terminalShell,
+  debuggerForm: debuggerCommandForm,
+  inputForm,
+  viewButtons: Array.from(
+    workspace.querySelectorAll<HTMLButtonElement>("[data-workspace-view-button]"),
+  ),
 });
 
 if (__WEB_LAB_LOCAL_MODE__) {

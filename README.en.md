@@ -28,6 +28,13 @@ execution state while preserving editor content and connection settings. Pressin
 continuation prompt executes the multiline input instead. Combined standard output and standard error are
 limited to 100,000 characters, after which the runtime recovers automatically.
 
+When the window is too short, scroll the page to keep working. At widths of 960px or more,
+the code area retains about ten visible lines and the REPL about six. Use Normal, Expand editor,
+or Expand REPL in the workspace toolbar to change views without losing code, unfinished input,
+or runtime state. Below 960px, expanded views also hide the virtual board until you return to Normal.
+Views apply only to the current page and return to Normal after reload.
+Stop stays at the top while scrolling within the workspace.
+
 ## Public alpha and supported environments
 
 This project is in public alpha. The UI, features, and browser storage format may change. Editor content

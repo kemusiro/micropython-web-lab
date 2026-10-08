@@ -758,11 +758,12 @@ test("opens device samples in persistent editor tabs without replacing existing 
   await page.locator(".editor-panel").evaluate((element: HTMLElement) => {
     element.style.lineHeight = "1.8";
   });
-  const tallerPanel = await page.locator(".editor-panel").boundingBox();
-  const tallerActions = await page.locator(".editor-actions").boundingBox();
-  expect(tallerActions!.y + tallerActions!.height).toBeLessThanOrEqual(
-    tallerPanel!.y + tallerPanel!.height + 1,
-  );
+  // Height changes are measured by ResizeObserver on the next rendering update.
+  await expect.poll(async () => {
+    const tallerPanel = await page.locator(".editor-panel").boundingBox();
+    const tallerActions = await page.locator(".editor-actions").boundingBox();
+    return tallerActions!.y + tallerActions!.height - tallerPanel!.y - tallerPanel!.height;
+  }).toBeLessThanOrEqual(1);
   await page.locator(".editor-panel").evaluate((element: HTMLElement) => {
     element.style.lineHeight = "";
   });
@@ -894,7 +895,8 @@ test("fills a wide viewport with a balanced editor, REPL, and device workbench",
 });
 
 test("resizes and restores the editor, REPL, and device panes", async ({ page }) => {
-  await page.setViewportSize({ width: 1600, height: 1000 });
+  // Leave room above the minimum working heights to exercise resizing in both directions.
+  await page.setViewportSize({ width: 1600, height: 1200 });
   await page.goto("/");
 
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();

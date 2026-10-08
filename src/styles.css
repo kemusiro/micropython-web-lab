@@ -201,7 +201,8 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
 .local-device-banner span { font-size: 0.82rem; }
 
 .workspace {
-  overflow: hidden;
+  /* Clip rounded corners without creating a scroll container for the sticky toolbar. */
+  overflow: clip;
   border: 1px solid #25322b;
   border-radius: 1.15rem;
   background: #17201c;
@@ -218,10 +219,16 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
 }
 
 .toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-wrap: wrap;
   padding: 0.65rem 0.75rem;
   border-bottom: 1px solid #34443b;
   background: linear-gradient(90deg, #1b2821, #17201c);
 }
+.workspace-view-controls { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.workspace-view-controls button[aria-pressed="true"] { border-color: #dfac45; background: #4b4930; }
 .toolbar-group { display: flex; flex-wrap: wrap; gap: 0.55rem; }
 
 .toolbar button {
@@ -1313,10 +1320,10 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
       "input column-resizer board";
     grid-template-columns: minmax(24rem, var(--workspace-left-pane)) 0.625rem minmax(22rem, 1fr);
     grid-template-rows:
-      auto minmax(19rem, var(--workspace-editor-weight)) 0.625rem auto
-      minmax(4.5rem, 0.55fr) auto auto;
+      auto minmax(var(--workspace-editor-min-height, 19rem), var(--workspace-editor-weight)) 0.625rem auto
+      minmax(11rem, 0.55fr) auto auto;
     align-items: stretch;
-    height: max(34rem, calc(100dvh - 8.25rem));
+    height: max(34rem, var(--workspace-min-height, 44rem), calc(100dvh - 8.25rem));
   }
 
   .workspace-resizer {
@@ -1377,8 +1384,8 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
   .toolbar { grid-area: toolbar; }
   .editor-panel {
     grid-area: editor;
-    /* Let the code area shrink when platform fonts wrap the toolbars. */
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    /* Keep the code minimum even when translated controls or platform fonts wrap. */
+    grid-template-rows: auto auto minmax(16rem, 1fr) auto auto;
     gap: 0.25rem;
     min-height: 0;
     overflow: hidden;
@@ -1391,7 +1398,7 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
     resize: none;
   }
 
-  .editor-code-area { min-height: 0; }
+  .editor-debug-workspace, .editor-code-area { min-height: 16rem; }
 
   .editor-debug-workspace[data-debugging="true"] {
     grid-template-columns: minmax(0, 1fr) minmax(12rem, 28%);
@@ -1470,4 +1477,41 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
   .connection-filter-summary { text-align: left; }
   .connection-editor-canvas { grid-template-columns: 1fr; gap: 0.75rem; }
   .connection-wires { display: none; }
+}
+
+/* Switching views only changes presentation; the editor and runtime remain mounted. */
+.workspace[data-workspace-view="editor"] > :is(.terminal-heading, .terminal-shell, .debugger-command-form, .input-panel, .workspace-row-resizer),
+.workspace[data-workspace-view="repl"] > :is(.editor-panel, .workspace-row-resizer) {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .workspace[data-workspace-view="editor"] {
+    grid-template-areas: "toolbar toolbar toolbar" "editor column-resizer board";
+    grid-template-rows: auto minmax(var(--workspace-editor-min-height, 19rem), 1fr);
+  }
+  .workspace[data-workspace-view="repl"] {
+    grid-template-areas:
+      "toolbar toolbar toolbar"
+      "terminal-heading column-resizer board"
+      "terminal column-resizer board"
+      "debugger column-resizer board"
+      "input column-resizer board";
+    grid-template-rows: auto auto minmax(11rem, 1fr) auto auto;
+  }
+}
+
+@media (min-width: 960px) and (max-height: 760px) {
+  .toolbar { gap: 0.4rem; }
+  .toolbar > .hint { flex-basis: 100%; }
+  .editor-panel .panel-heading .eyebrow { display: none; }
+  .editor-panel .panel-heading { gap: 0.5rem; }
+  .editor-panel .panel-heading label { font-size: 0.9rem; }
+  .terminal-heading { padding: 0.35rem 0.75rem; }
+}
+
+@media (max-width: 959px) {
+  .workspace:is([data-workspace-view="editor"], [data-workspace-view="repl"]) > .virtual-board-panel {
+    display: none;
+  }
 }
