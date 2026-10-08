@@ -844,7 +844,9 @@ test("runs a multi-device interactive example from the scenario gallery", async 
 test("fills a wide viewport with a balanced editor, REPL, and device workbench", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1920, height: 1000 });
+  // Test viewport-driven growth above the working minimum on every OS/font stack.
+  // Short-window clamping is covered separately in workspace-layout.spec.ts.
+  await page.setViewportSize({ width: 1920, height: 1200 });
   await page.goto("/");
 
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
@@ -872,14 +874,16 @@ test("fills a wide viewport with a balanced editor, REPL, and device workbench",
   expect(terminalBox).not.toBeNull();
   expect(workspaceBox).not.toBeNull();
   expect(workspaceBox!.width).toBeGreaterThan(1800);
-  expect(workspaceBox!.height).toBeLessThanOrEqual(900);
+  expect(workspaceBox!.height).toBeLessThanOrEqual(1100);
   expect(editorBox!.height).toBeGreaterThan(240);
   expect(terminalBox!.height).toBeGreaterThan(150);
-  expect(terminalBox!.y + terminalBox!.height).toBeLessThan(1000);
+  expect(terminalBox!.y + terminalBox!.height).toBeLessThan(1200);
   expect(terminalBox!.y).toBeLessThan(boardBox!.y + boardBox!.height);
   expect(Math.abs(boardBox!.height - (workspaceBox!.height - 50))).toBeLessThan(24);
 
-  await page.setViewportSize({ width: 1920, height: 1400 });
+  await page.setViewportSize({ width: 1920, height: 1600 });
+  await expect.poll(async () => (await workspace.boundingBox())!.height - workspaceBox!.height)
+    .toBeCloseTo(400, 0);
   const tallWorkspaceBox = await workspace.boundingBox();
   const tallEditorBox = await editor.boundingBox();
   const tallTerminalBox = await terminal.boundingBox();
