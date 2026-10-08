@@ -27,7 +27,12 @@ async function element(selector) {
   const value = await call("/element", { using: "css selector", value: selector });
   return value["element-6066-11e4-a52e-4f735466cecf"];
 }
-async function click(selector) { await call(`/element/${await element(selector)}/click`, {}); }
+async function click(selector) {
+  // WebDriver's automatic scrolling can leave a control under the sticky toolbar.
+  // Bring it into the working area, then use the actual browser click action.
+  await js('document.querySelector(arguments[0]).scrollIntoView({block:"center"})', selector);
+  await call(`/element/${await element(selector)}/click`, {});
+}
 async function fill(selector, text) {
   const id = await element(selector);
   await call(`/element/${id}/clear`, {});
@@ -80,6 +85,40 @@ try {
     await navigate(); await ready();
     assert.equal(await js("return crossOriginIsolated && typeof SharedArrayBuffer === 'function'"), true);
     await repl('print("native-start", 6 * 7)'); await output("native-start 42");
+  });
+  await check("short viewport minimum working heights", async () => {
+    await call("/window/rect", { width: 1280, height: 680 });
+    await until(`(() => {
+      const lines = id => { const el=document.querySelector(id), css=getComputedStyle(el); return (el.clientHeight-parseFloat(css.paddingTop)-parseFloat(css.paddingBottom))/parseFloat(css.lineHeight); };
+      return lines("#code-editor") >= 10 && lines("#terminal") >= 6;
+    })()`, "minimum code and REPL lines");
+    assert.equal(await js("return document.documentElement.scrollWidth <= innerWidth"), true);
+    report.viewport = await js("return { width: innerWidth, height: innerHeight }");
+  });
+  await check("view switching preserves code, draft and runtime", async () => {
+    await repl("pane_marker = 73"); await ready();
+    await fill("#code-editor", 'print("pane-retained")');
+    await fill("#repl-input", "pane_marker + 1");
+    await click('[data-workspace-view-button="editor"]');
+    assert.equal(await js('return getComputedStyle(document.querySelector("#terminal-shell")).display'), "none");
+    await click("#run-script-button"); await ready();
+    await click('[data-workspace-view-button="repl"]');
+    await output("pane-retained");
+    assert.equal(await value("#repl-input"), "pane_marker + 1");
+    await click("#send-button"); await output("74"); await ready();
+    await click('[data-workspace-view-button="normal"]');
+    assert.equal(await value("#code-editor"), 'print("pane-retained")');
+    await navigate(); await ready();
+    assert.equal(await js('return document.querySelector("#workspace").dataset.workspaceView'), "normal");
+  });
+  await check("sticky Stop remains available and recovers a running Worker", async () => {
+    await run('while True: pass');
+    await until('document.querySelector("#status-indicator").dataset.status === "executing"', "executing");
+    await js('window.scrollTo(0,document.querySelector("#workspace").getBoundingClientRect().top + scrollY + 150)');
+    await until('(() => {const r=document.querySelector("#stop-button").getBoundingClientRect(); return r.top>=0 && r.bottom<=innerHeight;})()', "sticky Stop visible");
+    await click("#stop-button");
+    await until('document.querySelector("#status-indicator").dataset.status === "stopped"', "stopped");
+    await click("#restart-button"); await ready();
   });
   await check("live ADC shared input", async () => {
     await rangeEnd(adc, false); assert.equal(await value(adc), "0");

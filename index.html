@@ -50,11 +50,16 @@
       </aside>
 
       <section id="workspace" class="workspace" aria-label="MicroPython REPL">
-        <div class="toolbar">
+        <div id="workspace-toolbar" class="toolbar">
           <div class="toolbar-group">
             <button id="restart-button" type="button" data-i18n="toolbar.restart">再起動</button>
             <button id="stop-button" class="danger" type="button" data-i18n="toolbar.stop">停止</button>
             <button id="clear-button" class="quiet" type="button" data-i18n="toolbar.clear">出力を消去</button>
+          </div>
+          <div class="workspace-view-controls" role="group" aria-label="作業画面の表示" data-i18n-aria-label="layout.views">
+            <button type="button" data-workspace-view-button="normal" aria-pressed="true" data-i18n="layout.normal">通常</button>
+            <button type="button" data-workspace-view-button="editor" aria-pressed="false" data-i18n="layout.editor">エディタを広く</button>
+            <button type="button" data-workspace-view-button="repl" aria-pressed="false" data-i18n="layout.repl">REPLを広く</button>
           </div>
           <span class="hint" data-i18n="toolbar.recoveryHint">Workerが応答しなくても「停止」で破棄できます</span>
         </div>

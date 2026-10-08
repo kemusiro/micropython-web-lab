@@ -71,6 +71,7 @@ export class ConnectionEditor {
   #resizeObserver: ResizeObserver | null = null;
   #scrollContainer: HTMLElement | null = null;
   #scrollListener: (() => void) | null = null;
+  #windowScrollListener: (() => void) | null = null;
   #boardScrollContainer: HTMLElement | null = null;
   #boardScrollListener: (() => void) | null = null;
   #boardScrollTop = 0;
@@ -113,6 +114,10 @@ export class ConnectionEditor {
 
   #render(message: string, messageState: "valid" | "saved" = "valid"): void {
     this.#resizeObserver?.disconnect();
+    if (this.#windowScrollListener !== null) {
+      window.removeEventListener("scroll", this.#windowScrollListener);
+      this.#windowScrollListener = null;
+    }
     if (this.#scrollContainer !== null && this.#scrollListener !== null) {
       this.#scrollContainer.removeEventListener("scroll", this.#scrollListener);
     }
@@ -1003,7 +1008,14 @@ export class ConnectionEditor {
         framePending = false;
         const toolbar = this.#root.querySelector<HTMLElement>(".connection-editor-toolbar");
         const stickyTop = (toolbar?.getBoundingClientRect().height ?? 0) + 16;
-        const scrollportHeight = panel?.clientHeight ?? document.documentElement.clientHeight;
+        // A short window can show only part of the taller workspace. Keep the sticky
+        // Pico small enough to remain inside the visible part of the device panel.
+        const viewportHeight = document.documentElement.clientHeight;
+        const panelBounds = panel?.getBoundingClientRect();
+        const scrollportHeight =
+          panelBounds === undefined
+            ? viewportHeight
+            : Math.min(panelBounds.bottom, viewportHeight) - Math.max(panelBounds.top, 0);
         this.#root.style.setProperty("--connection-board-sticky-top", `${stickyTop}px`);
         this.#root.style.setProperty(
           "--connection-board-sticky-max-height",
@@ -1018,6 +1030,8 @@ export class ConnectionEditor {
       });
     };
     draw();
+    this.#windowScrollListener = draw;
+    window.addEventListener("scroll", draw, { passive: true });
     if (typeof ResizeObserver !== "undefined") {
       this.#resizeObserver = new ResizeObserver(draw);
       this.#resizeObserver.observe(canvas);
