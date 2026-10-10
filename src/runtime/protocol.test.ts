@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { RUNTIME_PROTOCOL_VERSION, isWorkerToMainMessage } from "./protocol";
+import { RUNTIME_PROTOCOL_VERSION, isWorkerToMainMessage, isMainToWorkerMessage } from "./protocol";
+
+it("validates filesystem payloads in both directions and named execution paths", () => {
+  const project = { version: 1, entries: [{ path: "helper.py", kind: "file", data: new Uint8Array([42]) }] };
+  const message = { version: RUNTIME_PROTOCOL_VERSION, type: "filesystem", project, revision: 1, checkpoint: true };
+  expect(isWorkerToMainMessage(message)).toBe(true);
+  expect(isWorkerToMainMessage({ ...message, revision: 0 })).toBe(false);
+  expect(isWorkerToMainMessage({ ...message, project: { ...project, entries: [{ ...project.entries[0], path: "../escape" }] } })).toBe(false);
+  expect(isMainToWorkerMessage({ version: RUNTIME_PROTOCOL_VERSION, type: "project-sync", project })).toBe(true);
+  expect(isMainToWorkerMessage({ version: RUNTIME_PROTOCOL_VERSION - 1, type: "project-sync", project })).toBe(false);
+  expect(isMainToWorkerMessage({ version: RUNTIME_PROTOCOL_VERSION, type: "execute", requestId: "1", source: "pass", mode: "run", path: "/outside.py" })).toBe(false);
+});
 
 describe("isWorkerToMainMessage", () => {
   it("accepts valid runtime messages", () => {
     for (const type of ["repl-reset", "repl-executing", "output-limit"]) {
-      expect(isWorkerToMainMessage({ version: RUNTIME_PROTOCOL_VERSION, type })).toBe(true);
+      expect(isWorkerToMainMessage({ version: RUNTIME_PROTOCOL_VERSION, type, requestId: "input-1" })).toBe(true);
       expect(isWorkerToMainMessage({ version: RUNTIME_PROTOCOL_VERSION - 1, type })).toBe(false);
     }
     expect(

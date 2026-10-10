@@ -1008,14 +1008,20 @@ export class ConnectionEditor {
         framePending = false;
         const toolbar = this.#root.querySelector<HTMLElement>(".connection-editor-toolbar");
         const stickyTop = (toolbar?.getBoundingClientRect().height ?? 0) + 16;
-        // A short window can show only part of the taller workspace. Keep the sticky
-        // Pico small enough to remain inside the visible part of the device panel.
+        // Sticky positioning is bounded by the canvas, not just the scroll panel.
+        // Near the last device, an oversized Pico is pushed above the panel when
+        // the canvas bottom enters view (especially with Windows font metrics).
         const viewportHeight = document.documentElement.clientHeight;
         const panelBounds = panel?.getBoundingClientRect();
+        const visibleBottom = Math.min(
+          canvas.getBoundingClientRect().bottom,
+          panelBounds?.bottom ?? viewportHeight,
+          viewportHeight,
+        );
         const scrollportHeight =
           panelBounds === undefined
-            ? viewportHeight
-            : Math.min(panelBounds.bottom, viewportHeight) - Math.max(panelBounds.top, 0);
+            ? visibleBottom
+            : visibleBottom - Math.max(panelBounds.top, 0);
         this.#root.style.setProperty("--connection-board-sticky-top", `${stickyTop}px`);
         this.#root.style.setProperty(
           "--connection-board-sticky-max-height",

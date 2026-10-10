@@ -10,6 +10,7 @@ import type { SharedDeviceInputTransfer } from "../simulation/shared-device-inpu
 import { SharedDebuggerChannel } from "./debugger-channel";
 import type { ScriptExecutionMode } from "./protocol";
 import type { ConnectionGraphV1 } from "../connections/connection-model";
+import { validateProjectSnapshot, type ProjectSnapshot } from "../project/filesystem";
 
 export const MAX_RUNTIME_EXECUTION_MS = 10_000;
 export { MAX_RUNTIME_OUTPUT_CHARACTERS } from "./output-buffer";
@@ -19,6 +20,8 @@ export const MAX_UNEXPECTED_WORKER_AUTO_RECOVERIES = 1;
 type RuntimeOperation = "repl" | "script";
 
 export interface RuntimeClientHandlers {
+  onReplBusy?(busy: boolean): void;
+  onCheckpoint?(): Promise<void>;
   onMessage(message: WorkerToMainMessage): void;
   onStatus(status: RuntimeStatus): void;
 }
@@ -34,12 +37,17 @@ export interface RuntimeWorker {
 export type RuntimeWorkerFactory = () => RuntimeWorker;
 
 export interface RuntimeClientOptions {
+  project?: ProjectSnapshot;
   deviceInputs?: SharedDeviceInputTransfer;
   debuggerChannel?: SharedDebuggerChannel;
   connectionGraph?: ConnectionGraphV1;
 }
 
 export class RuntimeClient {
+  #project: ProjectSnapshot | undefined;
+  #filesystemGate: Int32Array | undefined;
+  #filesystemRevision = 0;
+  #pendingCheckpoint: Promise<void> | null = null;
   readonly #handlers: RuntimeClientHandlers;
   readonly #workerFactory: RuntimeWorkerFactory;
   readonly #deviceInputs: SharedDeviceInputTransfer | undefined;
@@ -54,7 +62,8 @@ export class RuntimeClient {
   #operationTimer: ReturnType<typeof setTimeout> | null = null;
   #operationElapsedMs = 0;
   #operationSegmentStartedAt: number | null = null;
-  #replOutputTail = "";
+  #nextInputNumber = 1;
+  #activeReplRequestId: string | null = null;
   #unexpectedWorkerFailureTimes: number[] = [];
 
   constructor(
@@ -67,6 +76,7 @@ export class RuntimeClient {
     this.#deviceInputs = options.deviceInputs;
     this.#debuggerChannel = options.debuggerChannel;
     this.#connectionGraph = options.connectionGraph;
+    this.#project = options.project;
   }
 
   get status(): RuntimeStatus {
@@ -81,12 +91,15 @@ export class RuntimeClient {
   #startWorker(): void {
     this.#discardWorker();
     this.#debuggerChannel?.reset();
+    this.#filesystemRevision = 0;
+    this.#pendingCheckpoint = null;
+    this.#filesystemGate = this.#project === undefined || typeof SharedArrayBuffer === "undefined" ? undefined : new Int32Array(new SharedArrayBuffer(4));
     this.#setStatus("starting");
 
     const worker = this.#workerFactory();
     this.#worker = worker;
 
-    worker.onmessage = (event) => {
+    worker.onmessage = async (event) => {
       if (worker !== this.#worker) {
         return;
       }
@@ -95,11 +108,36 @@ export class RuntimeClient {
         this.#reportClientError("Workerから不正なメッセージを受信しました。");
         return;
       }
-
+      if (event.data.type === "filesystem") {
+        if (event.data.revision <= this.#filesystemRevision) {
+          this.#reportClientError("Filesystem revision is out of order.");
+          return;
+        }
+        this.#filesystemRevision = event.data.revision;
+        this.#project = event.data.project;
+        if (!event.data.checkpoint && this.#filesystemGate) Atomics.store(this.#filesystemGate, 0, 0);
+        this.#handlers.onMessage(event.data);
+        if (event.data.checkpoint && this.#handlers.onCheckpoint) this.#pendingCheckpoint = this.#handlers.onCheckpoint();
+        return;
+      }
       if (event.data.type === "repl-executing") {
-        // Earlier prompts may arrive after the next input was queued. Arm the
-        // timer again when the Worker actually starts processing that input.
+        if (event.data.requestId !== this.#activeReplRequestId) return;
+        const requestId = event.data.requestId;
         this.#beginOperation("repl");
+        this.#activeReplRequestId = requestId;
+        return;
+      }
+      if (event.data.type === "repl-ready" && event.data.requestId !== this.#activeReplRequestId) return;
+      if ((event.data.type === "execution-result" || event.data.type === "repl-reset" || event.data.type === "repl-ready") && this.#pendingCheckpoint) {
+        this.#pauseOperationTimer();
+        try { await this.#pendingCheckpoint; }
+        catch { this.#reportClientError("Filesystem changes could not be saved in this browser."); }
+        if (worker !== this.#worker) return;
+        if (event.data.type === "repl-ready" && event.data.requestId !== this.#activeReplRequestId) return;
+        this.#pendingCheckpoint = null;
+      }
+      if (event.data.type === "repl-ready") {
+        this.#clearOperation();
         return;
       }
       if (event.data.type === "repl-reset") {
@@ -184,6 +222,8 @@ export class RuntimeClient {
     worker.postMessage({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      ...(this.#project === undefined ? {} : { project: this.#project }),
+      ...(this.#filesystemGate === undefined ? {} : { filesystemGate: this.#filesystemGate.buffer as SharedArrayBuffer }),
       ...(this.#deviceInputs === undefined
         ? {}
         : { deviceInputs: this.#deviceInputs }),
@@ -200,6 +240,12 @@ export class RuntimeClient {
     this.start();
   }
 
+  setProject(project: ProjectSnapshot): void {
+    validateProjectSnapshot(project);
+    this.#project = structuredClone(project);
+    if (this.#worker && this.#status === "ready" && this.#activeOperation === null) this.#worker.postMessage({ version: RUNTIME_PROTOCOL_VERSION, type: "project-sync", project: this.#project });
+  }
+
   setConnectionGraph(connectionGraph: ConnectionGraphV1): void {
     this.#connectionGraph = connectionGraph;
   }
@@ -214,19 +260,22 @@ export class RuntimeClient {
       return false;
     }
 
+    const requestId = `input-${this.#nextInputNumber++}`;
     this.#worker.postMessage({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "input",
+      requestId,
       data,
     });
     if (data.includes("\r") || data.includes("\n") || data.includes("\x04")) {
       this.#beginOperation("repl");
+      this.#activeReplRequestId = requestId;
     }
     return true;
   }
 
-  executeScript(source: string, mode: ScriptExecutionMode = "run"): boolean {
-    if (this.#worker === null || this.#status !== "ready") {
+  executeScript(source: string, mode: ScriptExecutionMode = "run", path?: string): boolean {
+    if (this.#worker === null || this.#status !== "ready" || this.#activeOperation !== null) {
       return false;
     }
 
@@ -241,6 +290,7 @@ export class RuntimeClient {
       requestId,
       source,
       mode,
+      ...(path === undefined ? {} : { path }),
     });
     return true;
   }
@@ -276,6 +326,7 @@ export class RuntimeClient {
   #beginOperation(operation: RuntimeOperation): void {
     this.#clearOperation();
     this.#activeOperation = operation;
+    if (operation === "repl") this.#handlers.onReplBusy?.(true);
     this.#operationElapsedMs = 0;
     this.#resumeOperationTimer();
   }
@@ -320,16 +371,7 @@ export class RuntimeClient {
       return false;
     }
 
-    if (this.#activeOperation === "repl" && this.#isWaitingForReplInput(data)) {
-      this.#clearOperation();
-    }
     return true;
-  }
-
-  #isWaitingForReplInput(data: string): boolean {
-    this.#replOutputTail = (this.#replOutputTail + data).slice(-64);
-    const currentLine = this.#replOutputTail.split(/\r\n|\r|\n/).at(-1);
-    return currentLine === ">>> " || currentLine === "... ";
   }
 
   #recoverFromLimit(message: string): void {
@@ -369,6 +411,7 @@ export class RuntimeClient {
   }
 
   #clearOperation(): void {
+    const wasRepl = this.#activeOperation === "repl";
     if (this.#operationTimer !== null) {
       clearTimeout(this.#operationTimer);
       this.#operationTimer = null;
@@ -378,7 +421,8 @@ export class RuntimeClient {
     this.#operationOutputCharacters = 0;
     this.#operationElapsedMs = 0;
     this.#operationSegmentStartedAt = null;
-    this.#replOutputTail = "";
+    this.#activeReplRequestId = null;
+    if (wasRepl) this.#handlers.onReplBusy?.(false);
   }
 
   #reportClientError(message: string): void {

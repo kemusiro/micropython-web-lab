@@ -1,4 +1,7 @@
 import "./styles.css";
+import { ProjectWorkspace } from "./project/workspace";
+import { FilePanel } from "./project/file-panel";
+import type { ProjectSnapshot } from "./project/filesystem";
 
 import { createOptionalContentIntegration } from "virtual:optional-content-integration";
 import {
@@ -73,6 +76,9 @@ const AUTOSAVE_DELAY_MS = 400;
 const MAX_EXPERIMENT_OUTPUT_CHARACTERS = 4_000;
 
 const browserStorage = getBrowserStorage();
+let originalScreenPreference: string | null = null;
+try { originalScreenPreference = browserStorage?.getItem("micropython-web-lab:app-screen:v1") ?? null; } catch { /* Blocked storage. */ }
+let legacySavedAt = "";
 const uiLocale = loadLocale(browserStorage, navigator.languages);
 applyDocumentTranslations(document, uiLocale);
 
@@ -184,6 +190,8 @@ let terminalFrame: number | null = null;
 let terminalInputComposing = false;
 let editorTabMovesFocus = false;
 let replExecutionPending = false;
+let replRuntimeBusy = false;
+let deferredProjectSave = false;
 let autosaveTimer: number | null = null;
 let activeDebuggerLine: number | null = null;
 const lastDeviceSequences = new Map<string, number>();
@@ -203,6 +211,9 @@ const optionalContentIntegration = createOptionalContentIntegration({
   openEditorTab,
 });
 const draftStorage = browserStorage;
+const projectWorkspace = new ProjectWorkspace();
+let projectSaveGeneration = 0;
+let projectPersistence = Promise.resolve();
 const referenceDeviceUis = referenceDeviceUisForLocale(uiLocale);
 const sharedDeviceInputs = window.crossOriginIsolated
   ? SharedDeviceInputs.create(WEB_LAB_DEVICE_INPUT_LAYOUT)
@@ -238,6 +249,12 @@ const runtime = new RuntimeClient(
   {
     onMessage: handleRuntimeMessage,
     onStatus: updateRuntimeStatus,
+    onCheckpoint: () => projectPersistence,
+    onReplBusy: (busy) => {
+      replRuntimeBusy = busy;
+      updateRuntimeStatus(runtime.status);
+      if (!busy && deferredProjectSave && projectWorkspace.loaded) { deferredProjectSave = false; scheduleDraftSave(); }
+    },
   },
   undefined,
   {
@@ -246,6 +263,25 @@ const runtime = new RuntimeClient(
     ...(localDeviceMetadata === null ? { connectionGraph: activeConnectionGraph } : {}),
   },
 );
+
+
+const filePanel = new FilePanel(requiredElement<HTMLElement>("project-files"), {
+  snapshot: () => projectWorkspace.files.snapshot(),
+  open: openProjectFile,
+  saveAs: async (path) => {
+    if (runtime.status !== "ready") throw new Error(t("files.wait"));
+    updateActiveEditorTabSource(codeEditor.value);
+    if (editorTabs.some(tab => tab.id !== activeEditorTabId && tab.path === path)) throw new Error(t("files.alreadyOpen"));
+    if (projectWorkspace.files.get(path) && activeEditorTab().path !== path && !window.confirm(t("files.overwriteConfirm", { path }))) return;
+    editorTabs = editorTabs.map(tab => tab.id === activeEditorTabId ? { ...tab, path, title: path.split("/").at(-1)!.slice(0, 80) } : tab);
+    await saveProjectEditors();
+  },
+  change: changeProjectFiles,
+  replace: replaceProjectFiles,
+  saveEditors: saveProjectEditors,
+  error: projectError,
+  busyChanged: () => updateRuntimeStatus(runtime.status),
+});
 
 new ConnectionEditor(connectionEditorRoot, {
   defaultGraph: localDeviceMetadata?.connectionGraph ?? MANAGED_CONNECTION_GRAPH,
@@ -263,7 +299,7 @@ window.addEventListener(
   (event) => {
     if (
       !isInterruptShortcut(event) ||
-      (!replExecutionPending &&
+      (!replExecutionPending && !replRuntimeBusy &&
         runtime.status !== "executing" &&
         runtime.status !== "debugging")
     ) {
@@ -390,7 +426,7 @@ languageSelect.addEventListener("change", () => {
   window.location.reload();
 });
 codeEditor.addEventListener("input", () => {
-  updateActiveEditorTabSource(codeEditor.value);
+  updateActiveEditorTabSource(codeEditor.value, true);
   scheduleDraftSave();
   optionalContentIntegration.editorChanged(codeEditor.value);
 });
@@ -461,12 +497,17 @@ resetDraftButton.addEventListener("click", () => {
   renderEditorTabs();
   optionalContentIntegration.editorChanged(codeEditor.value);
   setDraftStatus(t("draft.initial"), "idle");
+  saveCurrentDraft();
   codeEditor.focus();
 });
 
 window.addEventListener("pagehide", () => {
   if (autosaveTimer !== null) {
     cancelScheduledDraftSave();
+    // A bounded synchronous editor journal covers navigation before IndexedDB
+    // can finish. The full binary filesystem remains in IndexedDB.
+    updateActiveEditorTabSource(codeEditor.value);
+    if (draftStorage) saveEditorWorkspace(draftStorage, editorTabs, activeEditorTabId);
     saveCurrentDraft();
   }
 });
@@ -512,7 +553,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-scenari
   });
 }
 
-runtime.start();
+void initializeProject();
 void optionalContentIntegration.initialize();
 
 function loadInitialConnectionGraph(): {
@@ -687,6 +728,8 @@ function forceKeyboardInterrupt(): void {
 }
 
 function runCurrentScript(mode: ScriptExecutionMode): void {
+  if (filePanel.busy || replRuntimeBusy || runtime.status !== "ready") return;
+  cancelScheduledDraftSave();
   const source = codeEditor.value;
   if (source.trim().length === 0) {
     appendTerminal(t("system.enterCode"));
@@ -704,7 +747,18 @@ function runCurrentScript(mode: ScriptExecutionMode): void {
     return;
   }
 
-  const accepted = runtime.executeScript(source, mode);
+  // Synchronize all editor files before executing; preserve normal import caching.
+  if (projectWorkspace.loaded) {
+    try {
+      updateActiveEditorTabSource(source);
+      const staged = projectWorkspace.stageTabs(editorTabs, activeEditorTabId);
+      editorTabs = staged.tabs;
+      runtime.setProject(staged.filesystem);
+      filePanel.render();
+      void persistProject().catch(projectError);
+    } catch (error) { projectError(error); return; }
+  }
+  const accepted = runtime.executeScript(source, mode, activeEditorTab().path);
   if (!accepted) {
     appendTerminal(t("system.waitReady"));
     return;
@@ -783,6 +837,7 @@ function restoreEditorWorkspace(): "empty" | "loaded" | "invalid" | "unavailable
       setDraftStatus(t("draft.initial"), "idle");
       break;
     case "loaded":
+      legacySavedAt = result.workspace.savedAt;
       editorTabs = result.workspace.tabs.map((tab) => ({ ...tab }));
       activeEditorTabId = result.workspace.activeTabId;
       codeEditor.value = activeEditorTab().source;
@@ -818,30 +873,140 @@ function cancelScheduledDraftSave(): void {
 }
 
 function saveCurrentDraft(): void {
-  if (draftStorage === null) {
-    setDraftStatus(t("draft.unavailable"), "error");
-    return;
-  }
+  void saveProjectEditors().catch(projectError);
+}
 
+function projectError(error: unknown): void {
+  setDraftStatus(error instanceof Error ? error.message : String(error), "error");
+}
+
+async function initializeProject(): Promise<void> {
+  codeEditor.readOnly = true;
+  filePanel.setLocked(true);
+  try {
+    const stored = await projectWorkspace.load(editorTabs, activeEditorTabId, legacySavedAt);
+    editorTabs = stored.tabs;
+    activeEditorTabId = stored.activeTabId;
+    codeEditor.value = activeEditorTab().source;
+    renderEditorTabs();
+    runtime.setProject(projectWorkspace.files.snapshot());
+    await projectWorkspace.save(editorTabs, activeEditorTabId);
+    if (projectWorkspace.restored && !originalScreenPreference && !__WEB_LAB_LOCAL_MODE__) {
+      appScreen = "workspace"; experimentTabId = null;
+      saveAppScreen(browserStorage, appScreen); renderAppScreen();
+    }
+    if (projectWorkspace.restored) setDraftStatus(t("draft.restored", { time: formatSavedAt(new Date().toISOString()) }), "saved");
+  } catch (error) { projectError(error); }
+  filePanel.render();
+  runtime.start();
+}
+
+function persistProject(): Promise<void> {
+  const generation = ++projectSaveGeneration;
+  setDraftStatus(t("draft.pending"), "pending");
+  projectPersistence = projectWorkspace.save(editorTabs, activeEditorTabId).then(() => {
+    if (generation === projectSaveGeneration) setDraftStatus(t("draft.saved", { time: formatSavedAt(new Date().toISOString()) }), "saved");
+  });
+  return projectPersistence;
+}
+
+async function saveProjectEditors(): Promise<void> {
+  if (!projectWorkspace.loaded) throw new Error(t("draft.unavailable"));
+  cancelScheduledDraftSave();
   updateActiveEditorTabSource(codeEditor.value);
-  const result = saveEditorWorkspace(draftStorage, editorTabs, activeEditorTabId);
-  if (!result.ok || result.workspace === undefined) {
-    setDraftStatus(result.ok ? t("draft.unknownResult") : result.message, "error");
-    return;
-  }
+  if (replRuntimeBusy) { deferredProjectSave = true; await persistProject(); return; }
+  const staged = projectWorkspace.stageTabs(editorTabs, activeEditorTabId);
+  editorTabs = staged.tabs;
+  runtime.setProject(staged.filesystem);
+  renderEditorTabs();
+  filePanel.render();
+  await persistProject();
+}
 
-  setDraftStatus(t("draft.saved", { time: formatSavedAt(result.workspace.savedAt) }), "saved");
+function openProjectFile(path: string): void {
+  if (codeEditor.readOnly) return;
+  const entry = projectWorkspace.files.get(path);
+  if (entry?.kind !== "file") throw new Error(t("files.selectFile"));
+  const existing = editorTabs.find(tab => tab.path === path);
+  if (existing) { selectEditorTab(existing.id); return; }
+  const source = new TextDecoder("utf-8", { fatal: true }).decode(entry.data);
+  if (source.length > MAX_SCRIPT_CHARACTERS || source.includes("\0")) throw new Error(t("files.notEditable"));
+  if (openEditorTab(path.split("/").at(-1)!, source)) {
+    editorTabs = editorTabs.map(tab => tab.id === activeEditorTabId ? { ...tab, path } : tab);
+    renderEditorTabs();
+  }
+}
+
+async function changeProjectFiles(snapshot: ProjectSnapshot, rename?: { from: string; to: string }): Promise<void> {
+  if (runtime.status !== "ready") throw new Error(t("files.wait"));
+  cancelScheduledDraftSave();
+  updateActiveEditorTabSource(codeEditor.value);
+  const nextTabs = editorTabs.map(tab => {
+    const path = tab.path;
+    return rename && path && (path === rename.from || path.startsWith(rename.from + "/"))
+      ? { ...tab, path: rename.to + path.slice(rename.from.length), title: (rename.to + path.slice(rename.from.length)).split("/").at(-1)!.slice(0, 80) }
+      : tab;
+  }).filter(tab => !tab.path || snapshot.entries.some(entry => entry.kind === "file" && entry.path === tab.path));
+  if (!nextTabs.length) nextTabs.push({ id: "main", title: "main.py", source: "" });
+  const nextActive = nextTabs.some(tab => tab.id === activeEditorTabId) ? activeEditorTabId : nextTabs[0]!.id;
+  await projectWorkspace.replace(snapshot, nextTabs, nextActive);
+  editorTabs = nextTabs; activeEditorTabId = nextActive; codeEditor.value = activeEditorTab().source;
+  runtime.setProject(snapshot); renderEditorTabs(); filePanel.render();
+}
+
+async function replaceProjectFiles(snapshot: ProjectSnapshot): Promise<void> {
+  if (runtime.status !== "ready") throw new Error(t("files.wait"));
+  let tab: EditorWorkspaceTab = { id: "main", title: "main.py", source: "" };
+  const candidates = snapshot.entries.filter(entry => entry.kind === "file" && entry.path.endsWith(".py")).sort((a, b) => Number(b.path === "main.py") - Number(a.path === "main.py"));
+  for (const candidate of candidates) {
+    if (candidate.kind !== "file") continue;
+    try {
+      const source = new TextDecoder("utf-8", { fatal: true }).decode(candidate.data);
+      if (source.length <= MAX_SCRIPT_CHARACTERS && !source.includes("\0")) {
+        tab = { ...tab, path: candidate.path, title: candidate.path.split("/").at(-1)!.slice(0, 80), source };
+        break;
+      }
+    } catch { /* Binary files remain in the project without being opened as text. */ }
+  }
+  cancelScheduledDraftSave();
+  await projectWorkspace.replace(snapshot, [tab], tab.id);
+  editorTabs = [tab]; activeEditorTabId = tab.id; codeEditor.value = tab.source;
+  runtime.setProject(snapshot); runtime.restart(); renderEditorTabs(); filePanel.render();
+}
+
+function acceptRuntimeFiles(snapshot: ProjectSnapshot): void {
+  const before = projectWorkspace.files;
+  editorTabs = editorTabs.map(tab => {
+    if (!tab.path) return tab;
+    const previous = before.get(tab.path);
+    const incoming = snapshot.entries.find(entry => entry.path === tab.path);
+    if (previous?.kind === "file" && incoming?.kind === "file" && tab.source === new TextDecoder().decode(previous.data)) {
+      try {
+        const source = new TextDecoder("utf-8", { fatal: true }).decode(incoming.data);
+        if (source.length <= MAX_SCRIPT_CHARACTERS && !source.includes("\0")) return { ...tab, source };
+      } catch { /* Keep an editable draft when Python writes binary data. */ }
+    }
+    return tab;
+  }).filter(tab => !tab.path || before.get(tab.path)?.kind !== "file" || snapshot.entries.some(entry => entry.path === tab.path && entry.kind === "file"));
+  if (!editorTabs.length) editorTabs = [{ id: "main", title: "main.py", source: "" }];
+  if (!editorTabs.some(tab => tab.id === activeEditorTabId)) activeEditorTabId = editorTabs[0]!.id;
+  before.replace(snapshot);
+  renderEditorTabs();
+  codeEditor.value = activeEditorTab().source;
+  filePanel.render();
+  void persistProject().catch(projectError);
 }
 
 function activeEditorTab(): EditorWorkspaceTab {
   return editorTabs.find((tab) => tab.id === activeEditorTabId) ?? editorTabs[0]!;
 }
 
-function updateActiveEditorTabSource(source: string): void {
+function updateActiveEditorTabSource(source: string, edited = false): void {
   const index = editorTabs.findIndex((tab) => tab.id === activeEditorTabId);
   if (index < 0) {
     return;
   }
+  if (!edited && source === editorTabs[index]!.source.replace(/\r\n?/g, "\n")) return;
   editorTabs[index] = { ...editorTabs[index]!, source };
 }
 
@@ -859,7 +1024,7 @@ function renderEditorTabs(): void {
     select.setAttribute("role", "tab");
     select.setAttribute("aria-selected", String(tab.id === activeEditorTabId));
     select.textContent = tab.title;
-    select.title = tab.title;
+    select.title = tab.path ? "/project/" + tab.path : tab.title;
     select.disabled = locked;
     select.addEventListener("click", () => selectEditorTab(tab.id));
 
@@ -987,6 +1152,9 @@ function getBrowserStorage(): DraftStorage | null {
 
 function handleRuntimeMessage(message: WorkerToMainMessage): void {
   switch (message.type) {
+    case "filesystem":
+      acceptRuntimeFiles(message.project);
+      break;
     case "ready":
       replExecutionPending = false;
       runtimeVersion.textContent = `${compactVersion(message.micropythonVersion)} · restricted · ${message.runtimeBuild.sourceCommit.slice(0, 7)}`;
@@ -1146,7 +1314,7 @@ function renderDebuggerPause(
   editorDebugWorkspace.dataset.debugging = "true";
   debugVariablePanel.hidden = false;
   debuggerLocation.textContent = t("debugger.location", {
-    filename: message.filename,
+    filename: message.filename.replace(/^\/project\//, ""),
     line: message.line,
     functionName: message.functionName,
   });
@@ -1254,19 +1422,20 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   }[status];
 
   sendButton.disabled = status !== "ready";
-  const sourceLocked = status === "executing" || status === "debugging";
+  const sourceLocked = status === "executing" || status === "debugging" || filePanel.busy || replRuntimeBusy;
   openExperimentButton.disabled = sourceLocked;
   codeEditor.readOnly = sourceLocked;
   renderEditorTabs();
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-device-example]")) {
     button.disabled = sourceLocked;
   }
-  saveDraftButton.disabled = sourceLocked;
+  filePanel.setLocked(sourceLocked || status === "starting" || !projectWorkspace.loaded);
+  saveDraftButton.disabled = sourceLocked || !projectWorkspace.loaded;
   resetDraftButton.disabled = sourceLocked;
   if (status !== "debugging") {
     clearDebuggerWorkspace();
   }
-  terminalDirectInput.disabled = status !== "ready";
+  terminalDirectInput.disabled = status !== "ready" || filePanel.busy;
   terminalShell.dataset.ready = String(status === "ready" || status === "debugging");
   if (status !== "ready") {
     terminalInputComposing = false;
@@ -1279,8 +1448,9 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   } else {
     debuggerCommandInput.value = "";
   }
-  runScriptButton.disabled = status !== "ready";
-  debugScriptButton.disabled = status !== "ready" || sharedDebuggerChannel === null;
+  sendButton.disabled = status !== "ready" || filePanel.busy;
+  runScriptButton.disabled = status !== "ready" || filePanel.busy || replRuntimeBusy;
+  debugScriptButton.disabled = status !== "ready" || sharedDebuggerChannel === null || filePanel.busy || replRuntimeBusy;
   debugScriptButton.title =
     sharedDebuggerChannel === null
       ? t("debugger.requiresIsolation")

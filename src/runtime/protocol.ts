@@ -15,8 +15,9 @@ import {
   type DeviceState,
   type DeviceStateEvent,
 } from "../device-api/types";
+import { validateProjectSnapshot, projectPath, type ProjectSnapshot } from "../project/filesystem";
 
-export const RUNTIME_PROTOCOL_VERSION = 13 as const;
+export const RUNTIME_PROTOCOL_VERSION = 14 as const;
 export const MAX_SCRIPT_CHARACTERS = 200_000;
 export const MAX_DEBUGGER_GLOBALS = 100;
 export const MAX_DEBUGGER_VARIABLE_NAME_CHARACTERS = 128;
@@ -48,18 +49,24 @@ export type MainToWorkerMessage =
       deviceInputs?: SharedDeviceInputTransfer;
       debuggerChannel?: DebuggerChannelTransfer;
       connectionGraph?: ConnectionGraphV1;
+      project?: ProjectSnapshot;
+      filesystemGate?: SharedArrayBuffer;
     }
-  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "input"; data: string }
+  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "input"; requestId: string; data: string }
   | {
       version: typeof RUNTIME_PROTOCOL_VERSION;
       type: "execute";
       requestId: string;
       source: string;
       mode: ScriptExecutionMode;
-    };
+      path?: string;
+    }
+  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "project-sync"; project: ProjectSnapshot };
 
 export type WorkerToMainMessage =
-  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "repl-reset" | "repl-executing" | "output-limit" }
+  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "repl-executing" | "repl-ready"; requestId: string }
+  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "filesystem"; project: ProjectSnapshot; revision: number; checkpoint: boolean }
+  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "repl-reset" | "output-limit" }
   | {
       version: typeof RUNTIME_PROTOCOL_VERSION;
       type: "ready";
@@ -118,7 +125,12 @@ export function isWorkerToMainMessage(value: unknown): value is WorkerToMainMess
   }
 
   switch (value.type) {
+    case "filesystem":
+      try { validateProjectSnapshot(value.project); } catch { return false; }
+      return typeof value.revision === "number" && Number.isSafeInteger(value.revision) && value.revision > 0 && typeof value.checkpoint === "boolean";
     case "repl-executing":
+    case "repl-ready":
+      return isNonEmptyString(value.requestId);
     case "repl-reset":
     case "output-limit":
       return true;
@@ -161,6 +173,24 @@ export function isWorkerToMainMessage(value: unknown): value is WorkerToMainMess
     default:
       return false;
   }
+}
+
+export function isMainToWorkerMessage(value: unknown): value is MainToWorkerMessage {
+  if (!isRecord(value) || value.version !== RUNTIME_PROTOCOL_VERSION) return false;
+  try {
+    if (value.type === "start") {
+      if (value.project !== undefined) validateProjectSnapshot(value.project);
+      if (value.filesystemGate !== undefined && (!(value.filesystemGate instanceof SharedArrayBuffer) || value.filesystemGate.byteLength !== 4)) return false;
+      return true;
+    }
+    if (value.type === "project-sync") { validateProjectSnapshot(value.project); return true; }
+    if (value.type === "input") return isNonEmptyString(value.requestId) && typeof value.data === "string" && value.data.length <= MAX_SCRIPT_CHARACTERS;
+    if (value.type === "execute") {
+      if (value.path !== undefined) { if (typeof value.path !== "string") return false; projectPath(value.path); }
+      return typeof value.requestId === "string" && typeof value.source === "string" && value.source.length <= MAX_SCRIPT_CHARACTERS && (value.mode === "run" || value.mode === "debug");
+    }
+  } catch { return false; }
+  return false;
 }
 
 function isDebuggerVariables(value: unknown): value is readonly DebuggerVariable[] {

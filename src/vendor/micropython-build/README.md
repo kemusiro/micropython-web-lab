@@ -34,3 +34,13 @@ MicroPythonはMIT Licenseで配布される。ライセンス本文と第三者�
 `./scripts/use-node.sh node scripts/verify-micropython-runtime.mjs`は生成物ハッシュ、実行時の版、
 `sys.settrace()`、禁止モジュール、許可された`machine`ブリッジを検証する。第三者ライセンスの一覧は
 [`THIRD_PARTY_NOTICES.md`](../../../THIRD_PARTY_NOTICES.md)を参照する。
+
+## 永続ファイルと固定ヒープGC
+
+ADR 0035でMEMFSを容量制限付きの`/project`領域として利用する。固定ヒープGCの
+レジスタ走査に必要なAsyncifyを上流standard variantと同様に有効にする。
+`0002-await-asyncify-execution.patch`は上流api.jsに`runPythonAwaitable()`を追加し、
+非同期ccallの完了までコードと結果のバッファを保持する。WorkerはこのAPIと
+上流の`replProcessCharWithAsyncify()`を使用し、GC中も入力を直列処理する。
+更新時は両パッチを再適用し、`test:runtime`の反復割り当て・GC検証も実行する。
+`micropython.d.mts`はこのリポジトリで管理するAPI宣言であり、WASMビルドの生成対象ではない。

@@ -1,3 +1,4 @@
+import type { EmscriptenFs } from "../../runtime/project-filesystem";
 export interface MicroPythonLoadOptions {
   url?: string;
   pystack?: number;
@@ -9,9 +10,12 @@ export interface MicroPythonLoadOptions {
 }
 
 export interface BuiltMicroPythonInstance {
+  FS: EmscriptenFs;
   pyimport<T = unknown>(name: string): T;
   registerJsModule(name: string, module: object): void;
   runPython(code: string): unknown;
+  runPythonAwaitable(code: string): Promise<unknown>;
+  replProcessCharWithAsyncify(character: number): Promise<number>;
   replInit(): void;
   replProcessChar(character: number): number;
 }

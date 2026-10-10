@@ -1,0 +1,24 @@
+--- a/ports/webassembly/api.js
++++ b/ports/webassembly/api.js
+@@ -147,6 +147,21 @@
+             Module._free(buf);
+             return proxy_convert_mp_to_js_obj_jsside_with_free(value);
+         },
++        async runPythonAwaitable(code) {
++            const len = Module.lengthBytesUTF8(code);
++            const buf = Module._malloc(len + 1);
++            Module.stringToUTF8(code, buf, len + 1);
++            const value = Module._malloc(3 * 4);
++            await Module.ccall(
++                "mp_js_do_exec",
++                "number",
++                ["pointer", "number", "pointer"],
++                [buf, len, value],
++                { async: true },
++            );
++            Module._free(buf);
++            return proxy_convert_mp_to_js_obj_jsside_with_free(value);
++        },
+         runPythonAsync(code) {
+             const len = Module.lengthBytesUTF8(code);
+             const buf = Module._malloc(len + 1);

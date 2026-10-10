@@ -29,6 +29,7 @@ export interface EditorDraft {
 }
 
 export interface EditorWorkspaceTab {
+  readonly path?: string;
   readonly id: string;
   readonly title: string;
   readonly source: string;

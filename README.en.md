@@ -51,6 +51,41 @@ or runtime state. Below 960px, expanded views also hide the virtual board until 
 Views apply only to the current page and return to Normal after reload.
 Stop stays at the top while scrolling within the workspace.
 
+## Project files and ZIP
+
+**Project files** shows folders and files below `/project` as a tree. Click a folder to expand or
+collapse it; double-click a file or press Enter to open it. Use arrow keys to navigate and the left/right
+keys to collapse or expand folders. Select an entry to save editor contents to a path, create directories,
+rename entries, and delete files or empty directories. Closing a tab keeps its saved file.
+Restoring the initial sample changes the editor and keeps project files.
+
+Editor changes are autosaved; **Save in this browser** saves immediately. Files written by Python,
+including binary files, deletions, and renames, are saved to IndexedDB and restored after browser or
+Worker restarts. Save failures appear in the save status. Forced stops and abnormal page exits can
+lose changes that have not finished saving. Concurrent browser windows use the last saved state.
+
+The initial working directory is `/project`; imports search `/project` and `/project/lib`.
+Save `drivers/__init__.py` and `drivers/sensor.py` to use `from drivers.sensor import Sensor`.
+Imported modules remain cached after edits: restart, or press Ctrl+D at the empty main prompt,
+to reload them. Debug stepping covers the selected file.
+
+File contents are limited to 4 MiB in total, with at most 1,024 files/directories and 240 UTF-8 bytes
+per relative path. Python growth is checked before allocation and raises a no-space `OSError`.
+Names are case-sensitive; ordinary file writes are limited to `/project`.
+
+**Download ZIP** saves all editor tabs before exporting ordinary uncompressed ZIP contents, including
+binary data and empty directories. Extract, edit and re-zip files on your PC to import them again.
+ZIP paths map to `/project`; select an import source directory to remove a containing folder.
+After validation and confirmation, importing replaces all project files and editor tabs without
+running code. Connections and runtime state are not included. Failed imports preserve the current project.
+
+Imports support stored/Deflate entries and UTF-8 flagged or ASCII names. Encryption, split archives,
+ZIP64 and symlinks are unsupported. Input is limited to 8 MiB, expanded contents to 4 MiB,
+entries to 1,024 and processing to 15 seconds. Deflate requires the browser's
+`DecompressionStream("deflate-raw")`; unsupported environments report an import error.
+
+See [ADR 0035](docs/adr/0035-add-a-persistent-project-filesystem.md) for architecture and migration details.
+
 ## Public alpha and supported environments
 
 This project is in public alpha. The UI, features, and browser storage format may change. Editor content

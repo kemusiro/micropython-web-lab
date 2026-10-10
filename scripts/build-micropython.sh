@@ -79,6 +79,9 @@ fi
 patch --batch --forward --directory "$SOURCE_DIR" -p1 \
   < "$CONFIGURATION_DIR/patches/0001-guard-external-call-depth.patch"
 
+patch --batch --forward --directory "$SOURCE_DIR" -p1 \
+  < "$CONFIGURATION_DIR/patches/0002-await-asyncify-execution.patch"
+
 echo "Building restricted MicroPython WebAssembly runtime"
 MICROPY_GIT_TAG="$MICROPYTHON_TAG" \
 MICROPY_GIT_HASH="$MICROPYTHON_COMMIT" \
