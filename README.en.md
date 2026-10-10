@@ -51,15 +51,56 @@ or runtime state. Below 960px, expanded views also hide the virtual board until 
 Views apply only to the current page and return to Normal after reload.
 Stop stays at the top while scrolling within the workspace.
 
+## Workspace layout
+
+At widths of 960px or more, the workspace has three panes: project files and examples on the left,
+the editor and output/REPL in the center, and live devices on the right. Drag or use arrow keys to resize
+the center/device boundary and the editor/REPL boundary. Narrower windows stack the panes vertically.
+
+The file tree starts expanded. Open “File operations / ZIP” for file creation, save-as, renaming,
+deletion, and ZIP transfer. Examples from the library or a device card open as “Untitled” tabs,
+keeping your existing code. Choose “Save active tab”, select a directory, enter a file name, and click Save.
+A successful save adds the file to the tree and renames the tab. A tab with a file path saves to that file;
+“Save active tab as…” always opens the chooser. The editor's save button uses the same flow.
+Untitled tabs remain browser drafts, including after reload, and are excluded from the file tree and ZIP
+until named. Create new directories using the file operations before selecting them in the chooser.
+Cancellation or failed storage writes preserve the unnamed draft.
+Expand the multiline REPL input only when needed.
+The multi-device example list displays consecutive rows without blank spacing between them.
+
+“Devices and wiring” opens a dedicated wiring view. Return with “Back to workspace”. Navigation preserves
+the Worker, editor, REPL draft, Python variables, and pending wiring edits. Applying wiring still recreates
+the Worker. Stop and Restart remain available in the wiring view. Device cards use content-dependent heights
+and two columns when the device pane is wide enough. Collapsing a card leaves its simulation running.
+The existing saved device order is preserved; card collapse and multiline input visibility are page-local.
+
 ## Project files and ZIP
 
 **Project files** shows folders and files below `/project` as a tree. Click a folder to expand or
 collapse it; double-click a file or press Enter to open it. Use arrow keys to navigate and the left/right
-keys to collapse or expand folders. Select an entry to save editor contents to a path, create directories,
-rename entries, and delete files or empty directories. Closing a tab keeps its saved file.
+keys to collapse or expand folders. **Create file** opens an empty **Untitled** tab.
+Select the parent directory (or `/project` for the root), then use **Create directory** to enter its name.
+When a file is selected, the new directory is created beside it in its parent directory. **Rename** opens a dialog for the selected entry's
+name, keeping its parent directory. **Delete** removes the selected entry; non-empty directories require
+confirmation before deleting all descendants. **Move** lets you choose a destination directory while
+keeping the name. It moves all descendants and updates open tab paths. A directory cannot move into itself
+or a descendant, and existing entries are never overwritten. The `/project` root cannot be renamed, moved or deleted.
+Files can also be dragged onto a directory row, or onto `/project` to move them to the root. Dropping onto
+the current parent or dragging from outside the tree does not move anything. Use **Move** if dragging is unavailable.
+Tabs matching their saved files close without confirmation. Changed and untitled tabs ask whether to
+close without saving. Unsaved tabs display a leading `●`, such as `●blink.py`; successful file saves
+remove it. Reverting to the saved content also removes it. Automatic recovery backups keep all unsaved
+tabs marked, including `●Untitled`. Closing a tab keeps its saved file; discarding changes
+preserves the saved content. Closing an untitled tab discards its
+draft, so save it as a file first if you want to keep it.
 Restoring the initial sample changes the editor and keeps project files.
 
-Editor changes are autosaved; **Save in this browser** saves immediately. Files written by Python,
+After 400 ms, editor changes are automatically backed up as recovery drafts, separately from file contents.
+Reopening the page restores named and untitled drafts, the active tab, and unsaved markers. Only explicit
+**Save active tab** writes editor contents to a file. Running executes the current buffer; imports and
+`open()` use saved files. Untitled tabs remain browser drafts until **Save active tab** assigns a
+directory and file name; they are excluded from the file tree and ZIP export until then. Create a directory
+through file operations before choosing it in the save dialog. Files written by Python,
 including binary files, deletions, and renames, are saved to IndexedDB and restored after browser or
 Worker restarts. Save failures appear in the save status. Forced stops and abnormal page exits can
 lose changes that have not finished saving. Concurrent browser windows use the last saved state.
@@ -73,8 +114,9 @@ File contents are limited to 4 MiB in total, with at most 1,024 files/directorie
 per relative path. Python growth is checked before allocation and raises a no-space `OSError`.
 Names are case-sensitive; ordinary file writes are limited to `/project`.
 
-**Download ZIP** saves all editor tabs before exporting ordinary uncompressed ZIP contents, including
-binary data and empty directories. Extract, edit and re-zip files on your PC to import them again.
+**Download ZIP** exports saved files as an ordinary uncompressed ZIP, including binary data and empty
+directories. Unsaved edits and untitled drafts are excluded; explicitly save each tab you want to include.
+Extract, edit and re-zip files on your PC to import them again.
 ZIP paths map to `/project`; select an import source directory to remove a containing folder.
 After validation and confirmation, importing replaces all project files and editor tabs without
 running code. Connections and runtime state are not included. Failed imports preserve the current project.

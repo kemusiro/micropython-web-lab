@@ -11,6 +11,19 @@ describe("project files", () => {
     expect(() => fs.write("other", new Uint8Array([1]))).toThrow(); expect(fs.get("other")).toBeUndefined();
     fs.write("full", new Uint8Array([2])); expect(fs.usedBytes).toBe(1);
   });
+  it("removes a subtree only with explicit recursive deletion and preserves similarly named siblings", () => {
+    const fs = new ProjectFiles();
+    fs.write("lib/nested/helper.py", new Uint8Array([1, 2]));
+    fs.mkdir("lib/empty");
+    fs.write("library/keep.py", new Uint8Array([3]));
+    const before = fs.snapshot();
+    expect(() => fs.remove("lib")).toThrow("Directory is not empty");
+    expect(fs.snapshot()).toEqual(before);
+    fs.remove("lib", true);
+    expect(fs.snapshot().entries.map(entry => entry.path)).toEqual(["library", "library/keep.py"]);
+    expect(fs.usedBytes).toBe(1);
+    expect(() => fs.remove("", true)).toThrow();
+  });
   it.each(["../main.py", "/main.py", "a/../b", "a\\b", "a//b", "C:/main.py", "a\0b"])("rejects unsafe path %s", path => expect(() => projectPath(path)).toThrow());
   it("rejects duplicate and conflicting paths", () => {
     expect(() => validateProjectSnapshot({ version: 1, entries: [{ path: "a", kind: "directory" }, { path: "a", kind: "directory" }] })).toThrow();

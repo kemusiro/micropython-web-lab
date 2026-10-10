@@ -96,6 +96,7 @@ test("switches screens without resetting Python, drafts, or connections and reop
   await expect(page.locator("#experiment-feedback")).toContainText("LEDの点滅を確認できません");
   await expect(page.locator("#experiment-step")).toContainText("1 / 2");
   await page.locator("#open-workspace-button").click();
+  await page.locator("#repl-batch > summary").click();
   await page.locator("#repl-input").fill("print(retained_value)");
   await page.locator("#send-button").click();
   await expect(page.locator("#terminal")).toContainText("73");

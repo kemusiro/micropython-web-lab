@@ -16,6 +16,7 @@ interface StoredWorkspaceLayout extends WorkspaceLayoutState {
 
 interface WorkspaceLayoutElements {
   workspace: HTMLElement;
+  explorerPanel?: HTMLElement;
   columnResizer: HTMLElement;
   rowResizer: HTMLElement;
   editorPanel: HTMLElement;
@@ -93,24 +94,27 @@ export function installWorkspaceResizers(elements: WorkspaceLayoutElements): () 
   let state = loadWorkspaceLayout(elements.storage);
   let activePointer: { axis: "column" | "row"; pointerId: number } | null = null;
 
-  const appliedColumnRatio = (): number => {
-    const width = elements.workspace.getBoundingClientRect().width;
-    if (width <= 0) {
-      return state.columnRatio;
-    }
+  const paneSpace = (): { left: number; width: number; minimum: number; maximum: number } => {
+    const box = elements.workspace.getBoundingClientRect();
+    const explorerWidth = elements.explorerPanel?.getBoundingClientRect().width ?? 0;
+    const width = Math.max(1, box.width - explorerWidth);
     const handleWidth = elements.columnResizer.getBoundingClientRect().width;
-    const minimum = Math.min(COLUMN_RATIO_MAX, MIN_LEFT_PANE_PX / width);
+    const minimum = Math.min(COLUMN_RATIO_MAX, (explorerWidth > 0 ? 320 : MIN_LEFT_PANE_PX) / width);
     const maximum = Math.max(
       minimum,
-      Math.min(COLUMN_RATIO_MAX, (width - MIN_DEVICE_PANE_PX - handleWidth) / width),
+      Math.min(
+        COLUMN_RATIO_MAX,
+        (width - (explorerWidth > 0 ? 288 : MIN_DEVICE_PANE_PX) - handleWidth) / width,
+      ),
     );
-    return clamp(state.columnRatio, minimum, maximum);
+    return { left: box.left + explorerWidth, width, minimum, maximum };
   };
 
   const render = (): void => {
-    const columnRatio = appliedColumnRatio();
+    const space = paneSpace();
+    const columnRatio = clamp(state.columnRatio, space.minimum, space.maximum);
     const editorWeight = (TERMINAL_TRACK_WEIGHT * state.editorRatio) / (1 - state.editorRatio);
-    elements.workspace.style.setProperty("--workspace-left-pane", `${columnRatio * 100}%`);
+    elements.workspace.style.setProperty("--workspace-left-pane", `${columnRatio * space.width}px`);
     elements.workspace.style.setProperty("--workspace-editor-weight", `${editorWeight}fr`);
     elements.columnResizer.setAttribute("aria-valuenow", String(Math.round(columnRatio * 100)));
     elements.rowResizer.setAttribute("aria-valuenow", String(Math.round(state.editorRatio * 100)));
@@ -119,22 +123,10 @@ export function installWorkspaceResizers(elements: WorkspaceLayoutElements): () 
   const persist = (): void => saveWorkspaceLayout(elements.storage, state);
 
   const updateColumn = (clientX: number): void => {
-    const workspaceBox = elements.workspace.getBoundingClientRect();
-    const handleWidth = elements.columnResizer.getBoundingClientRect().width;
-    if (workspaceBox.width <= 0) {
-      return;
-    }
-    const minimum = Math.min(COLUMN_RATIO_MAX, MIN_LEFT_PANE_PX / workspaceBox.width);
-    const maximum = Math.max(
-      minimum,
-      Math.min(
-        COLUMN_RATIO_MAX,
-        (workspaceBox.width - MIN_DEVICE_PANE_PX - handleWidth) / workspaceBox.width,
-      ),
-    );
+    const space = paneSpace();
     state = {
       ...state,
-      columnRatio: clamp((clientX - workspaceBox.left) / workspaceBox.width, minimum, maximum),
+      columnRatio: clamp((clientX - space.left) / space.width, space.minimum, space.maximum),
     };
     render();
   };
@@ -245,6 +237,7 @@ export function installWorkspaceResizers(elements: WorkspaceLayoutElements): () 
 
   const resizeObserver = new ResizeObserver(render);
   resizeObserver.observe(elements.workspace);
+  if (elements.explorerPanel !== undefined) resizeObserver.observe(elements.explorerPanel);
   render();
 
   return () => {

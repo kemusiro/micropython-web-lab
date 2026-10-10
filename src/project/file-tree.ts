@@ -4,12 +4,16 @@ import type { ProjectEntry, ProjectSnapshot } from "./filesystem";
 interface FileTreeActions {
   select(path: string): void;
   open(path: string): void;
+  move(from: string, directory: string): void;
 }
+
+const FILE_DRAG_TYPE = "application/x-web-lab-project-file";
 
 /** View state stays separate from the saved filesystem. */
 export class FileTree {
   readonly element: HTMLElement;
   readonly #list: HTMLUListElement;
+  readonly #root: HTMLButtonElement;
   readonly #empty: HTMLElement;
   readonly #actions: FileTreeActions;
   readonly #expanded = new Set<string>();
@@ -18,14 +22,29 @@ export class FileTree {
   #selected = "";
   #focused = "";
   #locked = false;
+  #draggedFile: string | null = null;
+  #draggedRow: HTMLElement | null = null;
+  #dropTarget: HTMLElement | null = null;
 
   constructor(actions: FileTreeActions) {
     this.#actions = actions;
     this.element = document.createElement("div");
     this.element.className = "project-file-tree";
-    const heading = document.createElement("div");
+    const heading = document.createElement("button");
+    this.#root = heading;
+    heading.type = "button";
+    heading.id = "project-root-select";
     heading.className = "project-tree-root";
     heading.append(fileIcon("directory"), document.createTextNode("/project"));
+    this.#bindDropTarget(heading, "");
+    heading.addEventListener("click", () => { if (!this.#locked) this.#select(""); });
+    heading.addEventListener("keydown", event => {
+      if (!this.#locked && event.key === "ArrowDown") {
+        event.preventDefault();
+        const first = this.#visibleItems()[0]?.dataset.path;
+        if (first !== undefined) this.#select(first);
+      }
+    });
     this.#list = document.createElement("ul");
     this.#list.id = "project-file-tree";
     this.#list.setAttribute("role", "tree");
@@ -53,18 +72,26 @@ export class FileTree {
       this.#selected = parent;
     }
     this.#draw();
-    if (!this.#selected) this.#selected = this.#visibleItems()[0]?.dataset.path ?? "";
     this.#updateSelection();
     if (this.#selected !== previousSelection) this.#actions.select(this.#selected);
   }
 
   setLocked(locked: boolean): void {
     this.#locked = locked;
+    if (locked) this.#clearDrag();
     this.#list.setAttribute("aria-disabled", String(locked));
     this.#updateSelection();
   }
 
+  selectPath(path: string): void {
+    if (this.#locked || (path && !this.#entries.some(entry => entry.path === path))) return;
+    for (let parent = parentPath(path); parent; parent = parentPath(parent)) this.#expanded.add(parent);
+    this.#draw();
+    this.#select(path);
+  }
+
   #draw(): void {
+    this.#clearDrag();
     const restoreFocus = this.#list.contains(document.activeElement);
     const scrollTop = this.element.scrollTop;
     const children = new Map<string, ProjectEntry[]>();
@@ -98,6 +125,7 @@ export class FileTree {
         row.append(chevron, fileIcon(entry.kind), name);
         item.append(row);
         if (entry.kind === "directory") {
+          this.#bindDropTarget(row, entry.path);
           const expanded = this.#expanded.has(entry.path);
           item.setAttribute("aria-expanded", String(expanded));
           chevron.textContent = expanded ? "▾" : "▸";
@@ -106,6 +134,18 @@ export class FileTree {
           group.hidden = !expanded;
           group.append(...drawChildren(entry.path, depth + 1));
           item.append(group);
+        } else {
+          row.addEventListener("dragstart", event => {
+            if (this.#locked || !event.dataTransfer) { event.preventDefault(); return; }
+            this.#clearDrag();
+            this.#select(entry.path);
+            this.#draggedFile = entry.path;
+            this.#draggedRow = row;
+            row.dataset.dragging = "true";
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData(FILE_DRAG_TYPE, entry.path);
+          });
+          row.addEventListener("dragend", () => this.#clearDrag());
         }
         row.addEventListener("click", event => {
           if (this.#locked) return;
@@ -137,22 +177,70 @@ export class FileTree {
     return [...this.#list.querySelectorAll<HTMLElement>('[role="treeitem"]')];
   }
 
+  #bindDropTarget(target: HTMLElement, directory: string): void {
+    target.addEventListener("dragover", event => {
+      if (!this.#canDrop(event, directory)) return;
+      event.preventDefault();
+      event.dataTransfer!.dropEffect = "move";
+      this.#clearDropTarget();
+      this.#dropTarget = target;
+      target.dataset.dropActive = "true";
+    });
+    target.addEventListener("dragleave", event => {
+      if (event.relatedTarget instanceof Node && target.contains(event.relatedTarget)) return;
+      if (this.#dropTarget === target) this.#clearDropTarget();
+    });
+    target.addEventListener("drop", event => {
+      const from = this.#draggedFile;
+      const allowed = this.#canDrop(event, directory) && event.dataTransfer?.getData(FILE_DRAG_TYPE) === from;
+      this.#clearDrag();
+      if (!allowed || from === null) return;
+      event.preventDefault();
+      this.#actions.move(from, directory);
+    });
+  }
+
+  #canDrop(event: DragEvent, directory: string): boolean {
+    // Only a drag started in this tree can move a project file; external drops are ignored.
+    const from = this.#draggedFile;
+    return !this.#locked && from !== null && event.dataTransfer?.types.includes(FILE_DRAG_TYPE) === true &&
+      this.#entries.some(entry => entry.path === from && entry.kind === "file") &&
+      parentPath(from) !== directory &&
+      (directory === "" || this.#entries.some(entry => entry.path === directory && entry.kind === "directory"));
+  }
+
+  #clearDropTarget(): void {
+    this.#dropTarget?.removeAttribute("data-drop-active");
+    this.#dropTarget = null;
+  }
+
+  #clearDrag(): void {
+    this.#draggedFile = null;
+    this.#draggedRow?.removeAttribute("data-dragging");
+    this.#draggedRow = null;
+    this.#clearDropTarget();
+  }
+
   #visibleItems(): HTMLElement[] {
     return this.#items().filter(item => !item.closest("[hidden]"));
   }
 
   #updateSelection(): void {
+    this.#root.disabled = this.#locked;
+    this.#root.setAttribute("aria-pressed", String(this.#selected === ""));
     const visible = this.#visibleItems();
     if (!visible.some(item => item.dataset.path === this.#focused)) {
       this.#focused = visible.find(item => item.dataset.path === this.#selected)?.dataset.path ?? visible[0]?.dataset.path ?? "";
     }
     for (const item of this.#items()) {
+      item.querySelector<HTMLElement>(":scope > .project-tree-row")!.draggable = !this.#locked && item.dataset.kind === "file";
       item.setAttribute("aria-selected", String(item.dataset.path === this.#selected));
       item.tabIndex = !this.#locked && item.dataset.path === this.#focused ? 0 : -1;
     }
   }
 
   #focusItem(path: string): void {
+    if (path === "") { this.#root.focus({ preventScroll: true }); return; }
     const item = this.#visibleItems().find(item => item.dataset.path === path);
     item?.focus({ preventScroll: true });
     item?.querySelector(".project-tree-row")?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -179,7 +267,7 @@ export class FileTree {
     let target: string | undefined;
     switch (event.key) {
       case "ArrowDown": target = items[index + 1]?.dataset.path; break;
-      case "ArrowUp": target = items[index - 1]?.dataset.path; break;
+      case "ArrowUp": target = items[index - 1]?.dataset.path ?? ""; break;
       case "Home": target = items[0]?.dataset.path; break;
       case "End": target = items.at(-1)?.dataset.path; break;
       case "ArrowRight":
@@ -203,7 +291,7 @@ export class FileTree {
       default: return;
     }
     event.preventDefault();
-    if (target) this.#select(target);
+    if (target !== undefined) this.#select(target);
   }
 }
 

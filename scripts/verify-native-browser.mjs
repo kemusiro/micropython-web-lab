@@ -57,6 +57,9 @@ async function navigate() {
     await click("#open-workspace-button");
   }
   await js('document.querySelector("#language-select").value="ja";document.querySelector("#language-select").dispatchEvent(new Event("change",{bubbles:true}))');
+  if (!(await js('return document.querySelector("#repl-batch").open'))) {
+    await click("#repl-batch > summary");
+  }
 }
 async function run(source) { await fill("#code-editor", source); await click("#run-script-button"); }
 async function repl(source) { await fill("#repl-input", source); await click("#send-button"); }

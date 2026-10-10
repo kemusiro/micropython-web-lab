@@ -181,11 +181,7 @@ export class DeviceUiRenderer {
     heading.id = headingId;
     heading.textContent = entry.definition.title;
     card.setAttribute("aria-labelledby", headingId);
-    const sizeBadge = document.createElement("span");
-    sizeBadge.className = "device-ui-panel-size";
-    sizeBadge.textContent = panelSpan.label;
-    sizeBadge.title = t("device.panelSize", { size: panelSpan.label });
-    headingCopy.append(heading, sizeBadge);
+    headingCopy.append(heading);
     headingRow.append(headingCopy);
 
     const headingActions = document.createElement("div");
@@ -283,6 +279,24 @@ export class DeviceUiRenderer {
     actionStatus.dataset.state = "idle";
     actionStatus.setAttribute("aria-live", "polite");
     card.append(actionStatus);
+    const collapse = document.createElement("button");
+    collapse.type = "button";
+    collapse.className = "device-ui-collapse quiet";
+    collapse.textContent = "▾";
+    collapse.setAttribute("aria-label", t("device.collapse", { device: entry.definition.title }));
+    collapse.setAttribute("aria-expanded", "true");
+    components.id = `device-ui-${entry.instanceId}-components`;
+    collapse.setAttribute("aria-controls", components.id);
+    collapse.addEventListener("click", () => {
+      const collapsed = collapse.getAttribute("aria-expanded") === "true";
+      collapse.setAttribute("aria-expanded", String(!collapsed));
+      collapse.textContent = collapsed ? "▸" : "▾";
+      components.hidden = collapsed;
+      actionStatus.hidden = collapsed;
+      const description = card.querySelector<HTMLElement>(".device-ui-description");
+      if (description !== null) description.hidden = collapsed;
+    });
+    headingActions.append(collapse);
 
     return {
       definition: entry.definition,
