@@ -67,11 +67,11 @@ export class ProjectFiles {
     next.set(path, { path, kind: "directory" });
     this.replace({ version: 1, entries: [...next.values()] });
   }
-  remove(path: string): void {
+  remove(path: string, recursive = false): void {
     if (!this.get(path)) throw new Error("Path does not exist");
-    if ([...this.#entries.keys()].some(key => key.startsWith(path + "/"))) throw new Error("Directory is not empty");
+    if (!recursive && [...this.#entries.keys()].some(key => key.startsWith(path + "/"))) throw new Error("Directory is not empty");
     const next = this.snapshot();
-    next.entries = next.entries.filter(entry => entry.path !== path);
+    next.entries = next.entries.filter(entry => entry.path !== path && !(recursive && entry.path.startsWith(path + "/")));
     this.replace(next);
   }
   rename(path: string, target: string): void {

@@ -46,7 +46,7 @@ test("retreats files outside a stuck worker and enforces the 4 MiB quota", async
 
 test("imports ordinary ZIPs, selects an outer directory and exports an editable archive", async ({ page }) => {
   await page.goto("/"); const ready = page.getByText("実行可能", { exact: true }); await expect(ready).toBeVisible();
-  await page.locator("#project-files summary").click();
+  await page.locator("#project-file-tools > summary").click();
   const files = new ProjectFiles(); files.write("my-project/main.py", new TextEncoder().encode("from drivers.helper import answer\r\nprint('zip-answer', answer)\r\n"));
   files.write("my-project/drivers/__init__.py", new Uint8Array()); files.write("my-project/drivers/helper.py", new TextEncoder().encode("answer = 99\n")); files.mkdir("my-project/empty");
   await page.locator("#project-zip-file").setInputFiles({ name: "ordinary.zip", mimeType: "application/zip", buffer: Buffer.from(exportProjectZip(files.snapshot())) });
@@ -67,30 +67,42 @@ test("imports ordinary ZIPs, selects an outer directory and exports an editable 
 
 test("saves an editor file in a nested directory and opens it after reload", async ({ page }) => {
   await page.goto("/"); await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator("#project-files summary").click(); await page.locator("#code-editor").fill("answer = 7\n");
-  await page.locator("#project-file-path").fill("lib/custom.py"); await page.locator("#project-file-save-as").click();
+  await page.locator("#project-file-tools > summary").click(); await page.locator("#code-editor").fill("answer = 7\n");
+  await page.locator("#project-root-select").click();
+  await page.locator("#project-directory-create").click();
+  await page.locator("#project-entry-name").fill("lib");
+  await page.locator("#project-name-dialog").getByRole("button", { name: "作成", exact: true }).click();
+  await expect(page.locator("#project-name-dialog")).toBeHidden();
+  await expect(page.locator("#project-directory-create")).toBeEnabled(); await page.locator("#project-file-save-as").click();
+  await page.locator("#project-save-directory").selectOption("lib");
+  await page.locator("#project-save-filename").fill("custom.py");
+  await page.locator("#project-save-dialog").getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.locator("#draft-status")).toContainText("このブラウザに保存済み");
   await page.reload(); await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
   await expect(page.locator("#code-editor")).toHaveValue("answer = 7\n");
   await page.locator("#repl-input").fill("import custom; print('saved-import', custom.answer)"); await page.locator("#send-button").click();
   await expect(page.locator("#terminal")).toContainText("saved-import 7");
-  await page.locator("#project-files summary").click();
+  await page.locator("#project-file-tools > summary").click();
   await page.locator(".editor-tab-new").click();
-  page.once("dialog", dialog => dialog.accept());
+  let closeMessage = "";
+  const unexpectedCloseDialog = (dialog: import("@playwright/test").Dialog) => { closeMessage = dialog.message(); return dialog.dismiss(); };
+  page.on("dialog", unexpectedCloseDialog);
   await page.getByRole("button", { name: "custom.pyを閉じる", exact: true }).click();
+  page.off("dialog", unexpectedCloseDialog);
+  expect(closeMessage).toBe("");
   await page.locator("#project-file-tree [data-path='lib'] > .project-tree-row").click();
   await page.locator("#project-file-tree [data-path='lib/custom.py'] > .project-tree-row").click();
   await page.locator("#project-file-open").click();
   await expect(page.locator("#code-editor")).toHaveValue("answer = 7\n");
   await page.locator("#project-file-tree [data-path='lib/custom.py'] > .project-tree-row").click();
-  await page.locator("#project-file-path").fill("drivers/custom.py");
   await page.locator("#project-file-rename").click();
-  await expect(page.locator("#project-file-tree [data-path='drivers/custom.py']")).toHaveCount(1);
-  page.once("dialog", dialog => dialog.accept());
-  await page.locator("#project-file-tree [data-path='drivers'] > .project-tree-row").click();
-  await page.locator("#project-file-tree [data-path='drivers/custom.py'] > .project-tree-row").click();
+  await page.locator("#project-entry-name").fill("renamed.py");
+  await page.locator("#project-name-dialog").getByRole("button", { name: "変更", exact: true }).click();
+  await expect(page.locator("#project-name-dialog")).toBeHidden();
+  await expect(page.locator("#project-file-tree [data-path='lib/renamed.py']")).toHaveCount(1);
+  await page.locator("#project-file-tree [data-path='lib/renamed.py'] > .project-tree-row").click();
   await page.locator("#project-file-delete").click();
-  await expect(page.locator("#project-file-tree [data-path='drivers/custom.py']")).toHaveCount(0);
+  await expect(page.locator("#project-file-tree [data-path='lib/renamed.py']")).toHaveCount(0);
 });
 
 test("reads external Deflate ZIPs with data descriptors in the browser", async ({ page }) => {
@@ -111,7 +123,7 @@ test("reads external Deflate ZIPs with data descriptors in the browser", async (
   view.setUint16(central + 8, 0x808, true); view.setUint16(central + 10, 8, true); view.setUint32(central + 20, compressed.length, true);
   view.setUint32(zip.length - 6, central, true);
   await page.goto("/"); await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator("#project-files summary").click();
+  await page.locator("#project-file-tools > summary").click();
   await page.locator("#project-zip-file").setInputFiles({ name: "deflate.zip", mimeType: "application/zip", buffer: Buffer.from(zip) });
   await expect(page.locator("#project-zip-import")).toBeVisible();
   page.once("dialog", dialog => dialog.accept()); await page.locator("#project-zip-import").click();
@@ -125,7 +137,7 @@ test("failed IndexedDB writes preserve the current project during ZIP replacemen
   });
   await page.goto("/"); await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
   const source = await page.locator("#code-editor").inputValue();
-  await page.locator("#project-files summary").click();
+  await page.locator("#project-file-tools > summary").click();
   const files = new ProjectFiles(); files.write("replacement.py", new TextEncoder().encode("print('replacement')"));
   await page.locator("#project-zip-file").setInputFiles({ name: "replacement.zip", mimeType: "application/zip", buffer: Buffer.from(exportProjectZip(files.snapshot())) });
   await expect(page.locator("#project-zip-import")).toBeVisible();
@@ -144,6 +156,7 @@ test("Python deletion of an open editor file is not undone by subsequent saves",
   await expect(page.locator("#terminal")).toContainText("open-file-deleted");
   await expect(page.locator("#code-editor")).toHaveValue("");
   await page.locator("#save-draft-button").click();
+  await page.locator("#project-save-dialog").getByRole("button", { name: "キャンセル" }).click();
   await expect(page.locator("#draft-status")).toContainText("このブラウザに保存済み");
   await page.locator("#repl-input").fill("print('deleted-content', 'main.py' in os.listdir())");
   await page.locator("#send-button").click();
@@ -158,7 +171,7 @@ for (const width of [1280, 390]) {
     await page.locator("#repl-input").fill("import os; os.mkdir('drivers'); os.mkdir('drivers/sensors'); os.mkdir('empty'); open('drivers/sensors/a.py', 'w').write('answer = 42\\n'); open('drivers/sensors/b.py', 'w').write('answer = 7\\n'); print('tree-created')");
     await page.locator("#send-button").click();
     await expect(page.locator("#terminal")).toContainText("tree-created");
-    await page.locator("#project-files summary").click();
+    await page.locator("#project-file-tools > summary").click();
     const tree = page.getByRole("tree", { name: "プロジェクトファイル" });
     const drivers = tree.getByRole("treeitem", { name: "drivers", exact: true });
     const sensors = tree.getByRole("treeitem", { name: "sensors", exact: true });
@@ -178,7 +191,7 @@ for (const width of [1280, 390]) {
     await a.press("ArrowDown");
     await expect(b).toBeFocused();
     await expect(b).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("#project-file-path")).toHaveValue("drivers/sensors/b.py");
+    await expect(page.locator("#project-file-selection")).toHaveText("選択中: /project/drivers/sensors/b.py");
     await b.press("ArrowLeft");
     await expect(sensors).toBeFocused();
     await sensors.press("ArrowLeft");

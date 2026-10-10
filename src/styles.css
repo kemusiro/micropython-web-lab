@@ -914,13 +914,12 @@ button.quiet { background: transparent; }
 .connection-empty { color: #819187; font-size: 0.68rem; }
 
 .device-ui-grid {
-  --device-panel-unit: 16rem;
   --device-panel-gap: 0.75rem;
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: var(--device-panel-unit);
-  grid-auto-flow: dense;
+  grid-auto-rows: auto;
+  grid-auto-flow: row;
   align-items: stretch;
   gap: var(--device-panel-gap);
   margin-top: 0.85rem;
@@ -953,7 +952,7 @@ button.quiet { background: transparent; }
     opacity 120ms ease,
     transform 120ms ease;
 }
-.device-ui-card[data-panel-rows="2"] { grid-row: span 2; }
+
 
 .device-ui-card-heading {
   display: grid;
@@ -1050,9 +1049,6 @@ html[data-device-panel-dragging="true"] * { cursor: grabbing !important; }
   .device-ui-card[data-panel-columns="2"] { grid-column: span 2; }
 }
 
-@container (min-width: 52rem) {
-  .device-ui-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 
 .device-ui-indicator {
   width: fit-content;
@@ -1311,14 +1307,14 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
     --workspace-editor-weight: 1.65fr;
     display: grid;
     grid-template-areas:
-      "toolbar toolbar toolbar"
-      "editor column-resizer board"
-      "row-resizer column-resizer board"
-      "terminal-heading column-resizer board"
-      "terminal column-resizer board"
-      "debugger column-resizer board"
-      "input column-resizer board";
-    grid-template-columns: minmax(24rem, var(--workspace-left-pane)) 0.625rem minmax(22rem, 1fr);
+      "toolbar toolbar toolbar toolbar"
+      "explorer editor column-resizer board"
+      "explorer row-resizer column-resizer board"
+      "explorer terminal-heading column-resizer board"
+      "explorer terminal column-resizer board"
+      "explorer debugger column-resizer board"
+      "explorer input column-resizer board";
+    grid-template-columns: clamp(170px, 18vw, 240px) minmax(0, var(--workspace-left-pane)) 0.625rem minmax(0, 1fr);
     grid-template-rows:
       auto minmax(var(--workspace-editor-min-height, 19rem), var(--workspace-editor-weight)) 0.625rem auto
       minmax(11rem, 0.55fr) auto auto;
@@ -1385,7 +1381,7 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
   .editor-panel {
     grid-area: editor;
     /* Keep the code minimum even when translated controls or platform fonts wrap. */
-    grid-template-rows: auto auto minmax(16rem, 1fr) auto auto auto;
+    grid-template-rows: auto auto minmax(16rem, 1fr) auto auto;
     gap: 0.25rem;
     min-height: 0;
     overflow: hidden;
@@ -1480,23 +1476,23 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
 }
 
 /* Switching views only changes presentation; the editor and runtime remain mounted. */
-.workspace[data-workspace-view="editor"] > :is(.terminal-heading, .terminal-shell, .debugger-command-form, .input-panel, .workspace-row-resizer),
+.workspace[data-workspace-view="editor"] > :is(.terminal-heading, .terminal-shell, .debugger-command-form, .repl-batch, .workspace-row-resizer),
 .workspace[data-workspace-view="repl"] > :is(.editor-panel, .workspace-row-resizer) {
   display: none;
 }
 
 @media (min-width: 960px) {
   .workspace[data-workspace-view="editor"] {
-    grid-template-areas: "toolbar toolbar toolbar" "editor column-resizer board";
+    grid-template-areas: "toolbar toolbar toolbar toolbar" "explorer editor column-resizer board";
     grid-template-rows: auto minmax(var(--workspace-editor-min-height, 19rem), 1fr);
   }
   .workspace[data-workspace-view="repl"] {
     grid-template-areas:
-      "toolbar toolbar toolbar"
-      "terminal-heading column-resizer board"
-      "terminal column-resizer board"
-      "debugger column-resizer board"
-      "input column-resizer board";
+      "toolbar toolbar toolbar toolbar"
+      "explorer terminal-heading column-resizer board"
+      "explorer terminal column-resizer board"
+      "explorer debugger column-resizer board"
+      "explorer input column-resizer board";
     grid-template-rows: auto auto minmax(11rem, 1fr) auto auto;
   }
 }
@@ -1529,7 +1525,7 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
 
 body[data-app-screen="workspace"] :is(.experiment-guide, .experiment-preview, .experiment-result, .experiment-control) { display: none; }
 body[data-app-screen="experiment"] :is(.product-eyebrow, .lede, #runtime-version, .examples, [data-private-optional-content]) { display: none; }
-body[data-app-screen="experiment"] .workspace > :is(.toolbar, .workspace-resizer, .virtual-board-panel, .terminal-heading, .terminal-shell, .debugger-command-form, .input-panel) { display: none; }
+body[data-app-screen="experiment"] .workspace > :is(.toolbar, .workspace-resizer, .virtual-board-panel, .terminal-heading, .terminal-shell, .debugger-command-form, .repl-batch, .workspace-explorer, .device-configuration-screen) { display: none; }
 body[data-app-screen="experiment"] .editor-panel :is(.panel-heading .eyebrow, .panel-heading > span, .editor-tabs, .draft-actions, .editor-actions > span, #debug-script-button) { display: none; }
 
 body[data-app-screen="experiment"] .shell { max-width: 72rem; }
@@ -1663,7 +1659,15 @@ body[data-app-screen="experiment"] .project-files { display: none; }
   gap: .4rem;
   padding: .35rem .6rem;
   font-weight: 650;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
 }
+.project-tree-root[aria-pressed="true"] { background: #345a41; color: #fff; }
+.project-operation-context { margin: .5rem 0; font-size: .75rem; overflow-wrap: anywhere; color: #aebdb4; }
 .project-file-tree ul { margin: 0; padding: 0; list-style: none; }
 .project-tree-row {
   display: flex;
@@ -1681,6 +1685,8 @@ body[data-app-screen="experiment"] .project-files { display: none; }
 .project-tree-icon-file { color: #9fb0a6; }
 .project-tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-tree-row:hover { background: #283d30; }
+.project-tree-row[data-dragging="true"] { opacity: .5; }
+.project-file-tree [data-drop-active="true"] { background: #3c684b; color: #fff; outline: 2px solid #dfac45; outline-offset: -2px; }
 .project-file-tree [aria-selected="true"] > .project-tree-row { background: #345a41; color: #fff; }
 .project-file-tree [role="treeitem"]:focus { outline: none; }
 .project-file-tree [role="treeitem"]:focus-visible > .project-tree-row { outline: 2px solid #dfac45; outline-offset: -2px; }
@@ -1693,3 +1699,78 @@ body[data-app-screen="experiment"] .project-files { display: none; }
 @media (max-width: 700px) {
   .project-file-layout { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
 }
+
+/* Three-pane workspace: files and examples / code and REPL / live devices. */
+.workspace-explorer {
+  grid-area: explorer;
+  min-width: 0;
+  min-height: 0;
+  padding: .75rem;
+  color: #d7e1da;
+  background: #1d2a22;
+  border-right: 1px solid #34443b;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.workspace-explorer .project-files { border: 0; padding: 0; }
+.workspace-explorer summary { cursor: pointer; font-size: .85rem; padding-block: .35rem; }
+.workspace-explorer .project-file-layout { grid-template-columns: minmax(0, 1fr); gap: .5rem; }
+.workspace-explorer .project-file-tree { max-height: none; border: 0; background: transparent; font-size: .8rem; }
+.workspace-explorer #project-files-status { margin: .35rem 0; font-size: .72rem; overflow-wrap: anywhere; }
+.workspace-explorer .project-tree-hint { font-size: .68rem; }
+.workspace-explorer button { padding: .4rem .5rem; font-size: .75rem; box-shadow: none; }
+.workspace-explorer .project-file-controls { border-top: 1px solid #34443b; padding-top: .4rem; }
+.workspace-explorer .project-file-controls label { font-size: .75rem; }
+.workspace-explorer input, .workspace-explorer select { min-width: 0; color: #d7e1da; background: #111a15; border: 1px solid #52675b; border-radius: .3rem; padding: .4rem; }
+.sample-library { margin-top: 1.25rem; border-top: 1px solid #34443b; padding-top: .65rem; }
+.sample-library h2 { margin: .6rem 0 .35rem; color: #aebdb4; font-size: .75rem; }
+.sample-library .examples { margin: .75rem 0 0; padding: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; color: inherit; }
+.sample-library .examples-heading { display: block; margin: 0; }
+.sample-library .scenario-example-grid, .device-sample-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: .15rem; }
+.sample-library .scenario-example-grid { gap: 0; }
+.sample-library .scenario-example-card { display: block; min-height: 0; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; }
+.sample-library button { width: 100%; border: 0; border-radius: .25rem; color: #d7e1da; background: transparent; text-align: left; overflow-wrap: anywhere; }
+.sample-library button:hover { background: #345342; transform: none; }
+.device-pane-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.device-pane-heading button { padding: .45rem .6rem; font-size: .75rem; }
+.virtual-board-panel { padding: .75rem; }
+.virtual-board-heading > :is(.eyebrow, p:not(.device-ui-input-status)) { display: none; }
+.virtual-board-heading h2 { font-size: 1rem; }
+.virtual-board-heading .device-ui-input-status { font-size: .68rem; margin-top: .45rem; }
+.device-ui-grid { padding: 0; border: 0; border-radius: 0; background-image: none; background-color: transparent; align-items: start; }
+.device-ui-card { height: auto; overflow: visible; padding: .65rem; box-shadow: none; }
+.device-ui-card h3 { font-size: .85rem; }
+.device-ui-card-heading { gap: .35rem; }
+.device-ui-card-heading-actions { flex-wrap: wrap; justify-content: flex-end; }
+.device-ui-description { min-height: 0; margin-top: .5rem; }
+.device-ui-collapse { padding: .25rem .4rem; }
+.device-ui-components[hidden], .device-ui-description[hidden], .device-ui-action-status[hidden] { display: none; }
+.repl-batch { grid-area: input; color: #d7e1da; background: #1d2822; min-width: 0; }
+.repl-batch > summary { padding: .6rem 1rem; cursor: pointer; font-size: .8rem; }
+.repl-batch .input-panel { padding-top: .3rem; }
+.device-configuration-screen { grid-area: configuration; padding: 1rem; color: #d7e1da; min-width: 0; }
+.device-configuration-screen[hidden] { display: none; }
+.workspace[data-device-configuration="true"] > :not(.toolbar):not(.device-configuration-screen) { display: none; }
+.workspace[data-device-configuration="true"] { grid-template-areas: "toolbar" "configuration"; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; height: auto; min-height: 44rem; }
+.workspace[data-device-configuration="true"] .connection-overview { margin-top: 1rem; }
+body[data-app-screen="workspace"] .hero :is(.product-eyebrow, .lede) { display: none; }
+body[data-app-screen="workspace"] h1 { font-size: 1.8rem; }
+@media (max-width: 959px) {
+  .workspace-explorer { overflow: visible; border-right: 0; border-bottom: 1px solid #34443b; }
+  .workspace-explorer .project-file-tree { max-height: 17rem; }
+}
+
+.device-configuration-screen { max-height: calc(100dvh - 5rem); overflow-y: auto; overscroll-behavior: contain; }
+
+.workspace[data-device-configuration="true"] .workspace-view-controls { display: none; }
+
+.project-file-active-actions { display: grid; gap: .4rem; padding: .5rem 0; border-bottom: 1px solid #34443b; }
+.project-save-dialog { width: min(28rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; border: 1px solid #52675b; border-radius: .75rem; padding: 1.25rem; color: #d7e1da; background: #1d2a22; }
+.project-save-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.project-save-dialog form { display: grid; gap: 1rem; }
+.project-save-dialog h2 { font-size: 1rem; }
+.project-save-dialog label { display: grid; gap: .4rem; font-size: .85rem; }
+.project-save-dialog input, .project-save-dialog select { width: 100%; min-width: 0; padding: .6rem; border: 1px solid #52675b; border-radius: .35rem; color: #d7e1da; background: #111a15; font: inherit; }
+.project-save-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+.project-save-error { margin: 0; font-size: .8rem; color: #efaaa4; overflow-wrap: anywhere; }
+.project-save-error[hidden] { display: none; }

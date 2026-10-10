@@ -745,7 +745,7 @@ export class ConnectionEditor {
     }
     palette.replaceChildren(heading, targets);
 
-    const panel = this.#root.closest<HTMLElement>(".virtual-board-panel");
+    const panel = this.#root.closest<HTMLElement>(".virtual-board-panel, .device-configuration-screen");
     const bounds = panel?.getBoundingClientRect() ?? this.#root.getBoundingClientRect();
     const viewportWidth = document.documentElement.clientWidth;
     const viewportHeight = document.documentElement.clientHeight;
@@ -994,7 +994,7 @@ export class ConnectionEditor {
   }
 
   #scheduleWires(canvas: HTMLElement, svg: SVGSVGElement): void {
-    const panel = this.#root.closest<HTMLElement>(".virtual-board-panel");
+    const panel = this.#root.closest<HTMLElement>(".virtual-board-panel, .device-configuration-screen");
     const board = this.#root.querySelector<HTMLElement>(".connection-board-node");
     const boardScrollTop = this.#boardScrollTop;
     let boardScrollRestored = false;
@@ -1464,7 +1464,7 @@ function drawWires(canvas: HTMLElement, svg: SVGSVGElement): void {
     if (boardBounds !== undefined) {
       const boardInset = 10;
       const panelBounds = board
-        ?.closest<HTMLElement>(".virtual-board-panel")
+        ?.closest<HTMLElement>(".virtual-board-panel, .device-configuration-screen")
         ?.getBoundingClientRect();
       const visibleBoardTop = Math.max(boardBounds.top, panelBounds?.top ?? 0, 0);
       const visibleBoardBottom = Math.min(

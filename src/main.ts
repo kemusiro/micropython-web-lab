@@ -1,7 +1,7 @@
 import "./styles.css";
 import { ProjectWorkspace } from "./project/workspace";
 import { FilePanel } from "./project/file-panel";
-import type { ProjectSnapshot } from "./project/filesystem";
+import { ProjectFiles, type ProjectSnapshot } from "./project/filesystem";
 
 import { createOptionalContentIntegration } from "virtual:optional-content-integration";
 import {
@@ -143,6 +143,7 @@ if (examplesSection === null) {
 
 installWorkspaceResizers({
   workspace,
+  explorerPanel: requiredElement<HTMLElement>("workspace-explorer"),
   columnResizer: workspaceColumnResizer,
   rowResizer: workspaceRowResizer,
   editorPanel: scriptForm,
@@ -160,7 +161,7 @@ const workspaceViews = installWorkspaceViews({
   terminalHeading,
   terminalShell,
   debuggerForm: debuggerCommandForm,
-  inputForm,
+  inputForm: requiredElement<HTMLElement>("repl-batch"),
   viewButtons: Array.from(
     workspace.querySelectorAll<HTMLButtonElement>("[data-workspace-view-button]"),
   ),
@@ -191,7 +192,6 @@ let terminalInputComposing = false;
 let editorTabMovesFocus = false;
 let replExecutionPending = false;
 let replRuntimeBusy = false;
-let deferredProjectSave = false;
 let autosaveTimer: number | null = null;
 let activeDebuggerLine: number | null = null;
 const lastDeviceSequences = new Map<string, number>();
@@ -253,7 +253,6 @@ const runtime = new RuntimeClient(
     onReplBusy: (busy) => {
       replRuntimeBusy = busy;
       updateRuntimeStatus(runtime.status);
-      if (!busy && deferredProjectSave && projectWorkspace.loaded) { deferredProjectSave = false; scheduleDraftSave(); }
     },
   },
   undefined,
@@ -268,17 +267,12 @@ const runtime = new RuntimeClient(
 const filePanel = new FilePanel(requiredElement<HTMLElement>("project-files"), {
   snapshot: () => projectWorkspace.files.snapshot(),
   open: openProjectFile,
-  saveAs: async (path) => {
-    if (runtime.status !== "ready") throw new Error(t("files.wait"));
-    updateActiveEditorTabSource(codeEditor.value);
-    if (editorTabs.some(tab => tab.id !== activeEditorTabId && tab.path === path)) throw new Error(t("files.alreadyOpen"));
-    if (projectWorkspace.files.get(path) && activeEditorTab().path !== path && !window.confirm(t("files.overwriteConfirm", { path }))) return;
-    editorTabs = editorTabs.map(tab => tab.id === activeEditorTabId ? { ...tab, path, title: path.split("/").at(-1)!.slice(0, 80) } : tab);
-    await saveProjectEditors();
-  },
+  createFile: () => openEditorTab(t("editor.untitled"), ""),
+  activePath: () => activeEditorTab().path,
+  saveAs: saveActiveEditorTo,
   change: changeProjectFiles,
   replace: replaceProjectFiles,
-  saveEditors: saveProjectEditors,
+  backupDrafts: backupEditorDrafts,
   error: projectError,
   busyChanged: () => updateRuntimeStatus(runtime.status),
 });
@@ -427,6 +421,7 @@ languageSelect.addEventListener("change", () => {
 });
 codeEditor.addEventListener("input", () => {
   updateActiveEditorTabSource(codeEditor.value, true);
+  updateEditorTabSaveIndicators();
   scheduleDraftSave();
   optionalContentIntegration.editorChanged(codeEditor.value);
 });
@@ -470,7 +465,7 @@ codeEditor.addEventListener("keydown", (event) => {
 
 saveDraftButton.addEventListener("click", () => {
   cancelScheduledDraftSave();
-  saveCurrentDraft();
+  filePanel.saveActiveTab();
 });
 
 resetDraftButton.addEventListener("click", () => {
@@ -546,12 +541,32 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-scenari
     if (source === null) {
       return;
     }
-    const title = button.closest<HTMLElement>(".scenario-example-card")
-      ?.querySelector<HTMLElement>("h3")
-      ?.textContent?.trim();
-    openEditorTab(title || t("editor.untitled"), source);
+    openEditorTab(t("editor.untitled"), source);
   });
 }
+
+const deviceSampleList = requiredElement<HTMLElement>("device-sample-list");
+for (const entry of referenceDeviceUis) {
+  if (!hasDeviceExample(entry.instanceId)) continue;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "quiet";
+  button.dataset.libraryDeviceExample = entry.instanceId;
+  button.textContent = entry.definition.title;
+  button.addEventListener("click", () => openDeviceExample(entry.instanceId));
+  deviceSampleList.append(button);
+}
+
+const configurationScreen = requiredElement<HTMLElement>("device-configuration-screen");
+const openConfigurationButton = requiredElement<HTMLButtonElement>("open-device-configuration");
+const closeConfigurationButton = requiredElement<HTMLButtonElement>("close-device-configuration");
+function showDeviceConfiguration(open: boolean): void {
+  workspace.dataset.deviceConfiguration = String(open);
+  configurationScreen.hidden = !open;
+  (open ? closeConfigurationButton : openConfigurationButton).focus({ preventScroll: true });
+}
+openConfigurationButton.addEventListener("click", () => showDeviceConfiguration(true));
+closeConfigurationButton.addEventListener("click", () => showDeviceConfiguration(false));
 
 void initializeProject();
 void optionalContentIntegration.initialize();
@@ -747,14 +762,10 @@ function runCurrentScript(mode: ScriptExecutionMode): void {
     return;
   }
 
-  // Synchronize all editor files before executing; preserve normal import caching.
+  // Execute the current buffer; imported modules still use explicitly saved files.
   if (projectWorkspace.loaded) {
     try {
       updateActiveEditorTabSource(source);
-      const staged = projectWorkspace.stageTabs(editorTabs, activeEditorTabId);
-      editorTabs = staged.tabs;
-      runtime.setProject(staged.filesystem);
-      filePanel.render();
       void persistProject().catch(projectError);
     } catch (error) { projectError(error); return; }
   }
@@ -778,6 +789,7 @@ function runCurrentScript(mode: ScriptExecutionMode): void {
 }
 
 function showAppScreen(screen: AppScreen): void {
+  showDeviceConfiguration(false);
   appScreen = screen;
   saveAppScreen(browserStorage, screen);
   if (screen === "experiment") workspaceViews.reset();
@@ -873,7 +885,7 @@ function cancelScheduledDraftSave(): void {
 }
 
 function saveCurrentDraft(): void {
-  void saveProjectEditors().catch(projectError);
+  void backupEditorDrafts().catch(projectError);
 }
 
 function projectError(error: unknown): void {
@@ -891,6 +903,7 @@ async function initializeProject(): Promise<void> {
     renderEditorTabs();
     runtime.setProject(projectWorkspace.files.snapshot());
     await projectWorkspace.save(editorTabs, activeEditorTabId);
+    updateEditorTabSaveIndicators();
     if (projectWorkspace.restored && !originalScreenPreference && !__WEB_LAB_LOCAL_MODE__) {
       appScreen = "workspace"; experimentTabId = null;
       saveAppScreen(browserStorage, appScreen); renderAppScreen();
@@ -905,21 +918,38 @@ function persistProject(): Promise<void> {
   const generation = ++projectSaveGeneration;
   setDraftStatus(t("draft.pending"), "pending");
   projectPersistence = projectWorkspace.save(editorTabs, activeEditorTabId).then(() => {
+    updateEditorTabSaveIndicators();
     if (generation === projectSaveGeneration) setDraftStatus(t("draft.saved", { time: formatSavedAt(new Date().toISOString()) }), "saved");
   });
   return projectPersistence;
 }
 
-async function saveProjectEditors(): Promise<void> {
+async function saveActiveEditorTo(path: string): Promise<boolean> {
+  if (runtime.status !== "ready") throw new Error(t("files.wait"));
+  updateActiveEditorTabSource(codeEditor.value);
+  if (editorTabs.some(tab => tab.id !== activeEditorTabId && tab.path === path)) throw new Error(t("files.alreadyOpen"));
+  const entry = projectWorkspace.files.get(path);
+  if (entry?.kind === "directory") throw new Error(t("files.invalidFilename"));
+  if (entry && activeEditorTab().path !== path && !window.confirm(t("files.overwriteConfirm", { path }))) return false;
+  cancelScheduledDraftSave();
+  const nextTabs = editorTabs.map(tab => tab.id === activeEditorTabId
+    ? { ...tab, path, title: path.split("/").at(-1)!.slice(0, 80) } : tab);
+  const files = new ProjectFiles(projectWorkspace.files.snapshot());
+  files.write(path, new TextEncoder().encode(activeEditorTab().source));
+  // Persist first: a failed save must not rename or bind an untitled editor.
+  await projectWorkspace.replace(files.snapshot(), nextTabs, activeEditorTabId);
+  editorTabs = nextTabs;
+  runtime.setProject(files.snapshot());
+  renderEditorTabs();
+  filePanel.render();
+  setDraftStatus(t("files.saved", { time: formatSavedAt(new Date().toISOString()) }), "saved");
+  return true;
+}
+
+async function backupEditorDrafts(): Promise<void> {
   if (!projectWorkspace.loaded) throw new Error(t("draft.unavailable"));
   cancelScheduledDraftSave();
   updateActiveEditorTabSource(codeEditor.value);
-  if (replRuntimeBusy) { deferredProjectSave = true; await persistProject(); return; }
-  const staged = projectWorkspace.stageTabs(editorTabs, activeEditorTabId);
-  editorTabs = staged.tabs;
-  runtime.setProject(staged.filesystem);
-  renderEditorTabs();
-  filePanel.render();
   await persistProject();
 }
 
@@ -1023,6 +1053,7 @@ function renderEditorTabs(): void {
     select.dataset.editorTab = tab.id;
     select.setAttribute("role", "tab");
     select.setAttribute("aria-selected", String(tab.id === activeEditorTabId));
+    select.setAttribute("aria-label", tab.title);
     select.textContent = tab.title;
     select.title = tab.path ? "/project/" + tab.path : tab.title;
     select.disabled = locked;
@@ -1036,7 +1067,11 @@ function renderEditorTabs(): void {
     close.setAttribute("aria-label", t("editor.closeTab", { title: tab.title }));
     close.disabled = locked || editorTabs.length === 1;
     close.addEventListener("click", () => closeEditorTab(tab.id));
-    item.append(select, close);
+    const saveState = document.createElement("span");
+    saveState.id = `editor-tab-state-${tab.id}`;
+    saveState.className = "visually-hidden";
+    saveState.dataset.editorSaveState = tab.id;
+    item.append(select, close, saveState);
     return item;
   });
 
@@ -1050,6 +1085,22 @@ function renderEditorTabs(): void {
   add.addEventListener("click", () => openEditorTab(t("editor.untitled"), ""));
   elements.push(add);
   editorTabsElement.replaceChildren(...elements);
+  updateEditorTabSaveIndicators();
+}
+
+function updateEditorTabSaveIndicators(): void {
+  for (const tab of editorTabs) {
+    const select = [...editorTabsElement.querySelectorAll<HTMLButtonElement>("[data-editor-tab]")].find(element => element.dataset.editorTab === tab.id);
+    const state = [...editorTabsElement.querySelectorAll<HTMLElement>("[data-editor-save-state]")].find(element => element.dataset.editorSaveState === tab.id);
+    if (!select || !state) continue;
+    const unsaved = projectWorkspace.isTabUnsaved(tab);
+    select.textContent = (unsaved ? "●" : "") + tab.title;
+    select.dataset.unsaved = String(unsaved);
+    state.hidden = !unsaved;
+    state.textContent = unsaved ? t("editor.unsavedChanges") : "";
+    if (unsaved) select.setAttribute("aria-describedby", state.id);
+    else select.removeAttribute("aria-describedby");
+  }
 }
 
 function selectEditorTab(tabId: string): void {
@@ -1102,8 +1153,8 @@ function closeEditorTab(tabId: string): void {
   if (tab === undefined) {
     return;
   }
-  if (tab.source.trim().length > 0 && !window.confirm(t("editor.closeTabConfirm", { title: tab.title }))) {
-    return;
+  if (projectWorkspace.isTabUnsaved(tab)) {
+    if (!window.confirm(t(tab.path ? "editor.closeFileTabConfirm" : "editor.closeTabConfirm", { title: tab.title }))) return;
   }
   editorTabs.splice(index, 1);
   if (activeEditorTabId === tabId) {
@@ -1126,7 +1177,7 @@ function openDeviceExample(instanceId: string): void {
   if (source === null || entry === undefined) {
     return;
   }
-  openEditorTab(t("editor.sampleTitle", { device: entry.definition.title }), source);
+  openEditorTab(t("editor.untitled"), source);
 }
 
 function setDraftStatus(message: string, state: "idle" | "pending" | "saved" | "error"): void {

@@ -23,7 +23,7 @@ test("switches the complete managed UI to English and remembers the locale", asy
   await expect(page.getByRole("heading", { name: "Virtual board and devices" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Built-in LED" })).toBeVisible();
 
-  await page.getByText("Edit Pico 2 W connections", { exact: true }).click();
+  await page.locator("#open-device-configuration").click();
   await expect(page.getByRole("button", { name: "Apply connections" })).toBeVisible();
   await expect(page.getByRole("searchbox", { name: "Search devices" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Discard changes" })).toBeVisible();
@@ -47,7 +47,7 @@ test("restores the editor draft after a page reload", async ({ page }) => {
   await page.reload();
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
   await expect(editor).toHaveValue(savedSource);
-  await expect(page.locator("#draft-status")).toContainText("保存済みのコードを復元");
+  await expect(page.locator("#draft-status")).toContainText("復元用の下書きを復元");
 });
 
 test("indents and outdents code with Tab and Shift+Tab", async ({ page }) => {
@@ -556,7 +556,7 @@ test("keeps device panel buttons inside narrow cards with long titles", async ({
     const card = page.locator(`[data-device-instance="${instanceId}"]`);
     const actions = card.locator(".device-ui-card-heading-actions");
     await card.scrollIntoViewIfNeeded();
-    await expect(actions.locator("button")).toHaveCount(2);
+    await expect(actions.locator("button")).toHaveCount(3);
     await expect(actions.getByRole("button", { name: "サンプル" })).toBeVisible();
 
     const cardBox = await card.boundingBox();
@@ -570,27 +570,16 @@ test("keeps device panel buttons inside narrow cards with long titles", async ({
   }
 });
 
-test("places device panels on fixed grid units", async ({ page }) => {
+test("sizes device cards to their content in the narrow device pane", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-
-  const compact = page.locator('[data-device-instance="built-in-led"]');
-  const tall = page.locator('[data-device-instance="ae-bme280-0x76"]');
-  const large = page.locator('[data-device-instance="gt-502mgg-n"]');
-  await expect(compact).toHaveAttribute("data-panel-size", "1x1");
-  await expect(tall).toHaveAttribute("data-panel-size", "1x2");
-  await expect(large).toHaveAttribute("data-panel-size", "2x2");
-
-  const compactBox = await compact.boundingBox();
-  const tallBox = await tall.boundingBox();
-  const largeBox = await large.boundingBox();
-  expect(compactBox).not.toBeNull();
-  expect(tallBox).not.toBeNull();
-  expect(largeBox).not.toBeNull();
-  expect(tallBox!.height).toBeGreaterThan(compactBox!.height * 2);
-  expect(largeBox!.height).toBeCloseTo(tallBox!.height, 0);
-  expect(largeBox!.width).toBeGreaterThan(compactBox!.width * 2);
+  const compact = await page.locator('[data-device-instance="built-in-led"]').boundingBox();
+  const sensor = await page.locator('[data-device-instance="ae-bme280-0x76"]').boundingBox();
+  const gps = await page.locator('[data-device-instance="gt-502mgg-n"]').boundingBox();
+  expect(sensor!.height).toBeGreaterThan(compact!.height);
+  expect(gps!.height).toBeGreaterThan(compact!.height);
+  expect(gps!.width).toBeCloseTo(compact!.width, 0);
 });
 
 test("reorders device panels by drag and keyboard and restores the order", async ({ page }) => {
@@ -738,7 +727,7 @@ test("opens device samples in persistent editor tabs without replacing existing 
     .getByRole("button", { name: "内蔵LEDのサンプルを新しいエディタタブで開く" })
     .click();
   await expect(tabs.locator(".editor-tab")).toHaveCount(2);
-  await expect(tabs.getByRole("tab", { name: "内蔵LED サンプル" })).toHaveAttribute(
+  await expect(tabs.getByRole("tab", { name: "無題", exact: true })).toHaveAttribute(
     "aria-selected",
     "true",
   );
@@ -770,7 +759,7 @@ test("opens device samples in persistent editor tabs without replacing existing 
 
   await tabs.getByRole("tab", { name: "main.py" }).click();
   await expect(editor).toHaveValue('print("keep this program")');
-  await tabs.getByRole("tab", { name: "内蔵LED サンプル" }).click();
+  await tabs.getByRole("tab", { name: "無題", exact: true }).click();
   await expect(page.locator("#draft-status")).toContainText("このブラウザに保存済み");
 
   await page.reload();
@@ -861,9 +850,7 @@ test("fills a wide viewport with a balanced editor, REPL, and device workbench",
   expect(
     await board.evaluate((element) => element.scrollHeight > element.clientHeight),
   ).toBe(true);
-  expect(
-    await connectionOverview.evaluate((element: HTMLDetailsElement) => element.open),
-  ).toBe(false);
+  await expect(connectionOverview).toBeHidden();
 
   const boardBox = await board.boundingBox();
   const editorBox = await editor.boundingBox();
@@ -1003,7 +990,7 @@ test("edits and restores a multi-device I2C connection graph", async ({ page }) 
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
 
   const editor = page.locator(".connection-editor-panel");
-  await editor.locator("summary").click();
+  await page.locator("#open-device-configuration").click();
   const wires = editor.locator(".connection-wires");
   await expect(wires.locator('path[data-kind="i2c"]')).toHaveCount(2);
   await expect(editor.locator('[data-connection-endpoint="i2c:0"]')).toHaveCount(2);
@@ -1032,6 +1019,7 @@ test("edits and restores a multi-device I2C connection graph", async ({ page }) 
   await expect(page.locator("#terminal")).toContainText("配線を適用し、Workerを再生成");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
   await expect(page.locator('[data-device-instance="ae-bme280-0x76"]')).toHaveCount(0);
+  await page.locator("#close-device-configuration").click();
   await page.locator("#code-editor").fill(
     "from machine import I2C\nprint([hex(address) for address in I2C(0).scan()])",
   );
@@ -1040,7 +1028,7 @@ test("edits and restores a multi-device I2C connection graph", async ({ page }) 
 
   await page.reload();
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
+  await page.locator("#open-device-configuration").click();
   await expect(page.getByLabel("BME280環境センサーを接続")).not.toBeChecked();
   await expect(page.locator('[data-device-instance="ae-bme280-0x76"]')).toHaveCount(0);
 });
@@ -1048,7 +1036,7 @@ test("edits and restores a multi-device I2C connection graph", async ({ page }) 
 test("rejects a GPIO edit that conflicts with the shared I2C bus", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
+  await page.locator("#open-device-configuration").click();
 
   await page.getByLabel("押しボタン 入力 接続先").selectOption("GP8");
   await expect(page.locator(".connection-editor-status")).toContainText(
@@ -1068,12 +1056,13 @@ test("rejects a GPIO edit that conflicts with the shared I2C bus", async ({ page
 test("updates the push-button panel and samples after rewiring its GPIO", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
+  await page.locator("#open-device-configuration").click();
 
   await page.getByLabel("押しボタン 入力 接続先").selectOption("GP13");
   await page.getByRole("button", { name: "配線を適用" }).click();
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
 
+  await page.locator("#close-device-configuration").click();
   const buttonCard = page.locator('[data-device-instance="button-gp15"]');
   await expect(buttonCard.getByRole("button", { name: "GP13", exact: true })).toBeVisible();
   await expect(buttonCard.locator(".device-ui-description")).toContainText("GP13へ接続");
@@ -1100,7 +1089,7 @@ test("updates the push-button panel and samples after rewiring its GPIO", async 
 test("filters, collapses, and discards connection editor changes", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
+  await page.locator("#open-device-configuration").click();
 
   const editor = page.locator("#connection-editor-root");
   const search = page.getByRole("searchbox", { name: "デバイスを検索" });
@@ -1134,7 +1123,7 @@ test("filters, collapses, and discards connection editor changes", async ({ page
 test("selects and deselects every device connection at once", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
+  await page.locator("#open-device-configuration").click();
 
   const editor = page.locator("#connection-editor-root");
   const toggles = editor.locator("[data-connection-device-toggle]");
@@ -1170,7 +1159,7 @@ test("selects and deselects every device connection at once", async ({ page }) =
 test("rewires Pico ends and swaps compatible device ends by dragging", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
+  await page.locator("#open-device-configuration").click();
 
   const editor = page.locator("#connection-editor-root");
   const buttonBoardSocket = editor.locator(
@@ -1283,10 +1272,10 @@ test("rewires Pico ends and swaps compatible device ends by dragging", async ({ 
 test("keeps the board stable while dragging from the lower RGB LED", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
+  await page.locator("#open-device-configuration").click();
 
   const editor = page.locator("#connection-editor-root");
-  const panel = page.locator(".virtual-board-panel");
+  const panel = page.locator("#device-configuration-screen");
   const board = editor.locator(".connection-board-node");
   const redSocket = editor.locator(
     '[data-connection-port="ostamc5a31a-vv.red"] .connection-socket',
@@ -1347,8 +1336,8 @@ test("keeps the Pico inside the visible end of the wiring canvas", async ({ page
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
-  const panel = page.locator(".virtual-board-panel");
+  await page.locator("#open-device-configuration").click();
+  const panel = page.locator("#device-configuration-screen");
   const board = page.locator(".connection-board-node");
   await page.locator('[data-connection-port="ostamc5a31a-vv.red"] .connection-socket').scrollIntoViewIfNeeded();
   await panel.evaluate(element => window.scrollBy(0, element.getBoundingClientRect().top + 56));
@@ -1360,7 +1349,7 @@ test("keeps the Pico inside the visible end of the wiring canvas", async ({ page
     element.scrollTop += canvas.getBoundingClientRect().bottom - (top + 360);
   });
   await expect.poll(() => page.evaluate(() => {
-    const panel = document.querySelector(".virtual-board-panel")!.getBoundingClientRect();
+    const panel = document.querySelector("#device-configuration-screen")!.getBoundingClientRect();
     const canvas = document.querySelector(".connection-editor-canvas")!.getBoundingClientRect();
     const board = document.querySelector(".connection-board-node")!.getBoundingClientRect();
     return board.top >= Math.max(panel.top, 0) &&
@@ -1372,7 +1361,7 @@ test("keeps the Pico inside the visible end of the wiring canvas", async ({ page
 test("anchors wires to the Pico edge when their pins are scrolled out of view", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
-  await page.locator(".connection-editor-panel summary").click();
+  await page.locator("#open-device-configuration").click();
 
   const editor = page.locator("#connection-editor-root");
   const board = editor.locator(".connection-board-node");
@@ -1395,7 +1384,7 @@ test("anchors wires to the Pico edge when their pins are scrolled out of view", 
       redWire.evaluate((path) => {
         const match = /^M ([\d.-]+) ([\d.-]+)/.exec(path.getAttribute("d") ?? "");
         const board = document.querySelector<HTMLElement>(".connection-board-node");
-        const panel = document.querySelector<HTMLElement>(".virtual-board-panel");
+        const panel = document.querySelector<HTMLElement>("#device-configuration-screen");
         const canvas = document.querySelector<HTMLElement>(".connection-editor-canvas");
         if (match === null || board === null || panel === null || canvas === null) {
           return Number.POSITIVE_INFINITY;

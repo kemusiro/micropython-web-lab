@@ -74,6 +74,68 @@
           <span class="hint" data-i18n="toolbar.recoveryHint">Workerが応答しなくても「停止」で破棄できます</span>
         </div>
 
+        <aside id="workspace-explorer" class="workspace-explorer" aria-label="プロジェクトとサンプル" data-i18n-aria-label="workspace.explorer">
+          <details id="project-files" open></details>
+          <details class="sample-library" open>
+            <summary data-i18n="workspace.samples">サンプル</summary>
+            <section aria-labelledby="device-samples-title">
+              <h2 id="device-samples-title" data-i18n="workspace.deviceSamples">デバイス単体</h2>
+              <div id="device-sample-list" class="device-sample-list"></div>
+            </section>
+            <section class="examples" aria-labelledby="examples-title">
+              <div class="examples-heading">
+                <div>
+
+                  <h2 id="examples-title" data-i18n="examples.title">デバイス連携サンプル</h2>
+                </div>
+
+              </div>
+              <div class="scenario-example-grid">
+                <article class="scenario-example-card" data-scenario-example-card="button-rgb-controller">
+
+                  <button
+                    type="button"
+                    data-scenario-example="button-rgb-controller"
+                    data-i18n="examples.buttonRgbTitle"
+                    data-i18n-aria-label="examples.buttonRgbOpen"
+                    aria-label="ボタン連動RGBランプを新しいエディタタブで開く"
+                  >ボタン連動RGBランプ</button>
+                </article>
+                <article class="scenario-example-card" data-scenario-example-card="analog-rgb-mixer">
+
+                  <button
+                    type="button"
+                    data-scenario-example="analog-rgb-mixer"
+                    data-i18n="examples.analogRgbTitle"
+                    data-i18n-aria-label="examples.analogRgbOpen"
+                    aria-label="アナログ・カラーミキサーを新しいエディタタブで開く"
+                  >アナログ・カラーミキサー</button>
+                </article>
+                <article class="scenario-example-card" data-scenario-example-card="environment-dashboard">
+
+                  <button
+                    type="button"
+                    data-scenario-example="environment-dashboard"
+                    data-i18n="examples.environmentTitle"
+                    data-i18n-aria-label="examples.environmentOpen"
+                    aria-label="環境センサー・ダッシュボードを新しいエディタタブで開く"
+                  >環境センサー・ダッシュボード</button>
+                </article>
+                <article class="scenario-example-card" data-scenario-example-card="gps-rgb-beacon">
+
+                  <button
+                    type="button"
+                    data-scenario-example="gps-rgb-beacon"
+                    data-i18n="examples.gpsBeaconTitle"
+                    data-i18n-aria-label="examples.gpsBeaconOpen"
+                    aria-label="GPS測位ビーコンを新しいエディタタブで開く"
+                  >GPS測位ビーコン</button>
+                </article>
+              </div>
+            </section>
+          </details>
+        </aside>
+
         <form id="script-form" class="editor-panel">
           <div class="panel-heading">
             <div>
@@ -117,11 +179,10 @@
               </div>
             </aside>
           </div>
-          <details id="project-files"></details>
           <div class="draft-toolbar">
             <span id="draft-status" data-state="idle" aria-live="polite" data-i18n="draft.checking">保存状態を確認しています</span>
             <div class="draft-actions">
-              <button id="save-draft-button" class="quiet" type="button" data-i18n="draft.save">このブラウザに保存</button>
+              <button id="save-draft-button" class="quiet" type="button" data-i18n="draft.save">アクティブなタブを保存</button>
               <button id="reset-draft-button" class="danger-outline" type="button" data-i18n="draft.reset">
                 初期サンプルに戻す
               </button>
@@ -187,17 +248,14 @@
         <section class="virtual-board-panel" aria-labelledby="virtual-board-title">
           <div class="virtual-board-heading">
             <p class="eyebrow">Virtual board</p>
-            <h2 id="virtual-board-title" data-i18n="board.title">仮想ボード・デバイス</h2>
+            <div class="device-pane-heading">
+              <h2 id="virtual-board-title" data-i18n="board.title">仮想ボード・デバイス</h2>
+              <button id="open-device-configuration" type="button" class="quiet" data-i18n="workspace.configuration">構成・配線</button>
+            </div>
             <p data-i18n="board.description">Device Modelの検証済み状態と操作だけを、固定コンポーネントで表示します。</p>
             <p id="device-ui-input-status" class="device-ui-input-status" aria-live="polite"></p>
           </div>
-          <details class="connection-overview connection-editor-panel">
-            <summary data-i18n="board.connectionSummary">Pico 2 Wの配線を編集</summary>
-            <p data-i18n="board.connectionDescription">
-              機能レベルのポートを接続します。I2CとSPIは1つのバスを複数デバイスで共有できます。
-            </p>
-            <div id="connection-editor-root"></div>
-          </details>
+
           <div id="device-ui-root" class="device-ui-grid"></div>
         </section>
 
@@ -283,90 +341,33 @@
           </div>
         </form>
 
-        <form id="input-form" class="input-panel">
-          <label for="repl-input" data-i18n="repl.batchLabel">複数行をまとめて送信（任意）</label>
-          <textarea
-            id="repl-input"
-            rows="5"
-            spellcheck="false"
-            placeholder="例: 1 + 2"
-            data-i18n-placeholder="repl.placeholder"
-          ></textarea>
-          <div class="input-actions">
-            <span data-i18n="repl.reviewHint">内容を確認してから⌘/Ctrl + Enterでも送信できます</span>
-            <button id="send-button" type="submit" disabled data-i18n="repl.send">REPLへ送信</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="examples" aria-labelledby="examples-title">
-        <div class="examples-heading">
-          <div>
-            <p class="eyebrow" data-i18n="examples.eyebrow">Connected projects</p>
-            <h2 id="examples-title" data-i18n="examples.title">デバイス連携サンプル</h2>
-          </div>
-          <p data-i18n="examples.description">
-            複数デバイスの組み合わせや、実行中の操作を試せる応用作例です。個別デバイスの基本作例は各カードの「サンプル」から開けます。
-          </p>
-        </div>
-        <div class="scenario-example-grid">
-          <article class="scenario-example-card" data-scenario-example-card="button-rgb-controller">
-            <div class="scenario-example-tags" aria-hidden="true"><span>GPIO</span><span>PWM</span><span>UI</span></div>
-            <h3 data-i18n="examples.buttonRgbTitle">ボタン連動RGBランプ</h3>
-            <p data-i18n="examples.buttonRgbDescription">
-              実行中にGPIO 15ボタンを押すたび、内蔵LEDとRGB LEDの色を切り替えます。
+        <details id="repl-batch" class="repl-batch">
+          <summary data-i18n="repl.batchLabel">複数行をまとめて送信（任意）</summary>
+          <form id="input-form" class="input-panel">
+            <label class="visually-hidden" for="repl-input" data-i18n="repl.batchLabel">複数行をまとめて送信（任意）</label>
+            <textarea
+              id="repl-input"
+              rows="5"
+              spellcheck="false"
+              placeholder="例: 1 + 2"
+              data-i18n-placeholder="repl.placeholder"
+            ></textarea>
+            <div class="input-actions">
+              <span data-i18n="repl.reviewHint">内容を確認してから⌘/Ctrl + Enterでも送信できます</span>
+              <button id="send-button" type="submit" disabled data-i18n="repl.send">REPLへ送信</button>
+            </div>
+          </form>
+        </details>
+        <section id="device-configuration-screen" class="device-configuration-screen" aria-labelledby="device-configuration-title" hidden>
+          <button id="close-device-configuration" type="button" class="quiet" data-i18n="workspace.back">← ワークスペースへ戻る</button>
+          <section class="connection-overview connection-editor-panel">
+            <h2 id="device-configuration-title" data-i18n="board.connectionSummary">Pico 2 Wの配線を編集</h2>
+            <p data-i18n="board.connectionDescription">
+              機能レベルのポートを接続します。I2CとSPIは1つのバスを複数デバイスで共有できます。
             </p>
-            <button
-              type="button"
-              data-scenario-example="button-rgb-controller"
-              data-i18n="examples.open"
-              data-i18n-aria-label="examples.buttonRgbOpen"
-              aria-label="ボタン連動RGBランプを新しいエディタタブで開く"
-            >エディタで開く</button>
-          </article>
-          <article class="scenario-example-card" data-scenario-example-card="analog-rgb-mixer">
-            <div class="scenario-example-tags" aria-hidden="true"><span>ADC</span><span>PWM</span><span>UI</span></div>
-            <h3 data-i18n="examples.analogRgbTitle">アナログ・カラーミキサー</h3>
-            <p data-i18n="examples.analogRgbDescription">
-              実行中にADCスライダーを動かし、RGB LEDの色とPWMインジケーターの明るさを連続制御します。
-            </p>
-            <button
-              type="button"
-              data-scenario-example="analog-rgb-mixer"
-              data-i18n="examples.open"
-              data-i18n-aria-label="examples.analogRgbOpen"
-              aria-label="アナログ・カラーミキサーを新しいエディタタブで開く"
-            >エディタで開く</button>
-          </article>
-          <article class="scenario-example-card" data-scenario-example-card="environment-dashboard">
-            <div class="scenario-example-tags" aria-hidden="true"><span>I2C</span><span>SPI</span><span>OLED</span></div>
-            <h3 data-i18n="examples.environmentTitle">環境センサー・ダッシュボード</h3>
-            <p data-i18n="examples.environmentDescription">
-              BME280の温度・湿度・気圧を読み取り、SSD1331 RGB OLEDへ色分けして描画します。
-            </p>
-            <button
-              type="button"
-              data-scenario-example="environment-dashboard"
-              data-i18n="examples.open"
-              data-i18n-aria-label="examples.environmentOpen"
-              aria-label="環境センサー・ダッシュボードを新しいエディタタブで開く"
-            >エディタで開く</button>
-          </article>
-          <article class="scenario-example-card" data-scenario-example-card="gps-rgb-beacon">
-            <div class="scenario-example-tags" aria-hidden="true"><span>UART</span><span>GPS</span><span>PWM</span></div>
-            <h3 data-i18n="examples.gpsBeaconTitle">GPS測位ビーコン</h3>
-            <p data-i18n="examples.gpsBeaconDescription">
-              GPSのNMEAとPPSを検証し、有効な測位をRGB LEDの緑色で通知します。
-            </p>
-            <button
-              type="button"
-              data-scenario-example="gps-rgb-beacon"
-              data-i18n="examples.open"
-              data-i18n-aria-label="examples.gpsBeaconOpen"
-              aria-label="GPS測位ビーコンを新しいエディタタブで開く"
-            >エディタで開く</button>
-          </article>
-        </div>
+            <div id="connection-editor-root"></div>
+          </section>
+        </section>
       </section>
 
       <footer>
