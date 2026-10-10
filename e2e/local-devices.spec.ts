@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 test("loads and wires local BME280 and SSD1331 devices together", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
 
   const banner = page.locator("#local-device-banner");
@@ -54,4 +56,6 @@ test("loads and wires local BME280 and SSD1331 devices together", async ({ page 
   await page.getByRole("button", { name: "スクリプトを実行" }).click();
   await expect(terminal).toContainText("local scan ['0x76']");
   await expect(terminal).toContainText("local display [164, 167, 166]");
+  await expect(page.locator("body")).toHaveAttribute("data-app-screen", "workspace");
+  expect(errors).toEqual([]);
 });

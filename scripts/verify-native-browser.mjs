@@ -52,6 +52,10 @@ const value = (selector) => js("return document.querySelector(arguments[0]).valu
 const text = (selector) => js("return document.querySelector(arguments[0]).textContent", selector);
 async function navigate() {
   await call("/url", { url: fixture.url });
+  await until('document.querySelector("#workspace")?.dataset.workspaceView', "UI mounted");
+  if (await js('return document.body.dataset.appScreen === "experiment"')) {
+    await click("#open-workspace-button");
+  }
   await js('document.querySelector("#language-select").value="ja";document.querySelector("#language-select").dispatchEvent(new Event("change",{bubbles:true}))');
 }
 async function run(source) { await fill("#code-editor", source); await click("#run-script-button"); }

@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 test("loads an unapproved local I2C device and labels the development build", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
 
   const banner = page.locator("#local-device-banner");
@@ -25,4 +27,6 @@ test("loads an unapproved local I2C device and labels the development build", as
   const terminal = page.locator("#terminal");
   await expect(terminal).toContainText("local devices ['0x48', '0x50', '0x76']");
   await expect(terminal).toContainText("local register b'LOCAL'");
+  await expect(page.locator("body")).toHaveAttribute("data-app-screen", "workspace");
+  expect(errors).toEqual([]);
 });

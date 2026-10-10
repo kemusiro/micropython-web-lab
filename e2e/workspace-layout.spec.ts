@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator } from "./workspace-test";
 
 async function visibleLines(locator: Locator) {
   return locator.evaluate((element: HTMLElement) => {

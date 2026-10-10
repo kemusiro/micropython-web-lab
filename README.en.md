@@ -9,6 +9,22 @@ affiliation with or endorsement by any of them.
 
 Raspberry Pi is a trademark of Raspberry Pi Ltd.
 
+## First use
+
+Browsers without saved code open the First experiment screen. Press Run to blink the built-in LED,
+then change 500 to 200 in `interval_ms = 500` and run it again. Open workspace to use the device list,
+wiring editor, debugger, and REPL. Stop, error output, and restart remain available in the simple screen. Press Esc, then Tab to leave the editor.
+
+Choose Try a button to open a sample that reads the virtual push button for eight seconds after Run.
+Press and release the button repeatedly; each state change prints `Button: pressed` or `Button: released`
+in Output and REPL. Run the script again to repeat the test.
+
+Switching screens preserves code, Python runtime state, and wiring. Your screen choice is saved as an
+independent browser-local preference. Existing saved projects and local Device development default to
+the full workspace. Reopening First experiment prepares a sample tab without replacing existing code.
+Guide progress restarts on reload while edited code is retained. Invalid saved editor data keeps the
+workspace visible with the existing error message.
+
 ## Key features
 
 - A browser-based MicroPython REPL
@@ -28,7 +44,7 @@ execution state while preserving editor content and connection settings. Pressin
 continuation prompt executes the multiline input instead. Combined standard output and standard error are
 limited to 100,000 characters, after which the runtime recovers automatically.
 
-When the window is too short, scroll the page to keep working. At widths of 960px or more,
+In the full workspace, when the window is too short, scroll the page to keep working. At widths of 960px or more,
 the code area retains about ten visible lines and the REPL about six. Use Normal, Expand editor,
 or Expand REPL in the workspace toolbar to change views without losing code, unfinished input,
 or runtime state. Below 960px, expanded views also hide the virtual board until you return to Normal.

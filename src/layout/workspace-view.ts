@@ -14,7 +14,7 @@ interface WorkspaceViewElements {
   viewButtons: readonly HTMLButtonElement[];
 }
 
-export function installWorkspaceViews(elements: WorkspaceViewElements): () => void {
+export function installWorkspaceViews(elements: WorkspaceViewElements): { reset(): void; dispose(): void } {
   let view: WorkspaceView = "normal";
   const editorControls = Array.from(elements.editorPanel.children).filter(
     (child): child is HTMLElement =>
@@ -53,17 +53,30 @@ export function installWorkspaceViews(elements: WorkspaceViewElements): () => vo
     const button = event.currentTarget as HTMLButtonElement;
     const nextView = button.dataset.workspaceViewButton;
     if (nextView !== "normal" && nextView !== "editor" && nextView !== "repl") return;
+    setView(nextView);
+    // Bring the new view into sight after changing from a scrolled, taller layout.
+    elements.workspace.scrollIntoView({ block: "start" });
+  };
+
+  const setView = (nextView: WorkspaceView): void => {
     view = nextView;
     elements.workspace.dataset.workspaceView = view;
     for (const control of elements.viewButtons) {
       control.setAttribute("aria-pressed", String(control.dataset.workspaceViewButton === view));
     }
     updateMinimumHeight();
-    // Bring the new view into sight after changing from a scrolled, taller layout.
-    elements.workspace.scrollIntoView({ block: "start" });
   };
 
-  const resizeObserver = new ResizeObserver(updateMinimumHeight);
+  // Switching screens changes several observed controls at once. Measure on the
+  // next frame instead of resizing an observed element during observer delivery.
+  let resizeFrame: number | null = null;
+  const resizeObserver = new ResizeObserver(() => {
+    if (resizeFrame !== null) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = null;
+      updateMinimumHeight();
+    });
+  });
   for (const element of [
     elements.workspace,
     elements.toolbar,
@@ -78,8 +91,12 @@ export function installWorkspaceViews(elements: WorkspaceViewElements): () => vo
   elements.workspace.dataset.workspaceView = view;
   updateMinimumHeight();
 
-  return () => {
-    resizeObserver.disconnect();
-    for (const button of elements.viewButtons) button.removeEventListener("click", onViewClick);
+  return {
+    reset: () => setView("normal"),
+    dispose: () => {
+      resizeObserver.disconnect();
+      if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+      for (const button of elements.viewButtons) button.removeEventListener("click", onViewClick);
+    },
   };
 }
