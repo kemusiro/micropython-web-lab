@@ -1515,3 +1515,125 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
     display: none;
   }
 }
+
+/* First experiment uses the same editor and runtime, with one visible result. */
+.screen-navigation {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 0.85rem;
+}
+.screen-navigation button { color: #31483c; box-shadow: none; }
+.screen-navigation button:hover:not(:disabled) { color: white; }
+.screen-navigation button[hidden], .experiment-control[hidden],
+.experiment-next[hidden], #experiment-output-details[hidden] { display: none; }
+
+body[data-app-screen="workspace"] :is(.experiment-guide, .experiment-preview, .experiment-result, .experiment-control) { display: none; }
+body[data-app-screen="experiment"] :is(.product-eyebrow, .lede, #runtime-version, .examples, [data-private-optional-content]) { display: none; }
+body[data-app-screen="experiment"] .workspace > :is(.toolbar, .workspace-resizer, .virtual-board-panel, .terminal-heading, .terminal-shell, .debugger-command-form, .input-panel) { display: none; }
+body[data-app-screen="experiment"] .editor-panel :is(.panel-heading .eyebrow, .panel-heading > span, .editor-tabs, .draft-actions, .editor-actions > span, #debug-script-button) { display: none; }
+
+body[data-app-screen="experiment"] .shell { max-width: 72rem; }
+body[data-app-screen="experiment"] h1 { font-size: clamp(1.5rem, 3vw, 2rem); }
+body[data-app-screen="experiment"] .hero { gap: 1rem; }
+body[data-app-screen="experiment"] .alpha-note { max-width: 46rem; font-size: 0.7rem; }
+body[data-app-screen="experiment"] .runtime-card { min-width: 0; padding: 0.5rem 0.75rem; }
+body[data-app-screen="experiment"] .workspace {
+  display: grid;
+  grid-template-areas: "guide guide" "editor preview" "result result";
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 25%);
+  grid-template-rows: auto auto auto;
+  height: auto;
+  overflow: clip;
+}
+.experiment-guide {
+  grid-area: guide;
+  padding: 1.5rem 1.5rem 0.5rem;
+  color: #e6f0e9;
+}
+.experiment-guide .eyebrow { color: #e5b84f; }
+.experiment-guide h2 { font-size: clamp(1.25rem, 2.5vw, 1.75rem); margin: 0 0 0.65rem; }
+.experiment-guide > p:last-child { margin: 0; color: #c6d5cb; line-height: 1.6; }
+body[data-app-screen="experiment"] .editor-panel {
+  grid-area: editor;
+  grid-template-areas: "heading actions" "code code" "draft draft";
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  gap: 0.65rem;
+  padding: 1rem 1.5rem;
+  background: transparent;
+}
+body[data-app-screen="experiment"] .panel-heading { grid-area: heading; }
+body[data-app-screen="experiment"] .editor-actions { grid-area: actions; }
+body[data-app-screen="experiment"] .editor-debug-workspace { grid-area: code; }
+body[data-app-screen="experiment"] .draft-toolbar { grid-area: draft; }
+body[data-app-screen="experiment"] :is(.editor-debug-workspace, .editor-code-area) { min-height: 0; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+body[data-app-screen="experiment"] #code-editor { height: 21rem; min-height: 0; resize: vertical; font-size: 0.9rem; }
+body[data-app-screen="experiment"] .draft-toolbar { font-size: 0.72rem; }
+body[data-app-screen="experiment"] .editor-actions { flex-direction: row; justify-content: flex-end; }
+body[data-app-screen="experiment"] #run-script-button { min-width: 8rem; background: #e5b84f; border-color: #e5b84f; color: #18221c; font-weight: 750; }
+body[data-app-screen="experiment"] #run-script-button:hover:not(:disabled) { background: #f2ca72; }
+.experiment-preview {
+  grid-area: preview;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  padding: 5rem 1.5rem 1.5rem;
+  color: #e6f0e9;
+  text-align: center;
+}
+.experiment-preview h3 { margin: 0.5rem 0 0; font-size: 1rem; }
+.experiment-preview p { margin: 0; font-size: 0.75rem; color: #a8bfb1; }
+.experiment-led {
+  display: block;
+  width: 4rem;
+  height: 4rem;
+  border: 3px solid #536e60;
+  border-radius: 50%;
+  background: #0d1611;
+}
+.experiment-led[data-on="true"] {
+  border-color: #93ffb6;
+  background: #54dc88;
+  box-shadow: 0 0 2rem rgb(84 220 136 / 55%);
+}
+.experiment-result {
+  grid-area: result;
+  padding: 1rem 1.5rem 1.5rem;
+  border-top: 1px solid #34443b;
+  color: #c6d5cb;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+#experiment-feedback { margin: 0; }
+#experiment-output-details { margin-top: 0.75rem; }
+#experiment-output-details summary { cursor: pointer; color: #c6d5cb; }
+#experiment-output { max-height: 10rem; overflow: auto; padding: 0.75rem; border-radius: 0.5rem; color: #e6f0e9; background: #0d1611; white-space: pre-wrap; overflow-wrap: anywhere; }
+.experiment-next { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+
+@media (max-width: 600px) {
+  body[data-app-screen="experiment"] .hero-actions { width: auto; justify-items: end; }
+  body[data-app-screen="experiment"] .hero { flex-direction: row; align-items: flex-start; }
+  body[data-app-screen="experiment"] .language-selector > span { display: none; }
+  body[data-app-screen="experiment"] .language-selector select { min-width: 0; max-width: 6rem; }
+  body[data-app-screen="experiment"] .runtime-card { font-size: 0.75rem; }
+  body[data-app-screen="experiment"] .workspace {
+    grid-template-areas: "guide" "preview" "editor" "result";
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .experiment-guide { padding: 1rem 1rem 0.5rem; }
+  body[data-app-screen="experiment"] .editor-panel {
+    padding: 0.75rem 1rem;
+    grid-template-areas: "heading" "actions" "code" "draft";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+  }
+  body[data-app-screen="experiment"] #code-editor { height: 20rem; font-size: 0.8rem; }
+  .experiment-preview { flex-direction: row; flex-wrap: wrap; padding: 0.75rem 1rem; gap: 0.5rem; }
+  .experiment-led { width: 1.5rem; height: 1.5rem; }
+  .experiment-preview h3 { margin: 0; }
+  .experiment-preview p { display: none; }
+  .experiment-result { padding: 1rem; }
+}

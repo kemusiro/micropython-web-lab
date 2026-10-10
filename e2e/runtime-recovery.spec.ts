@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./workspace-test";
 
 test("Ctrl+D resets Python state and outputs while preserving editor and analog input", async ({ page }) => {
   await page.goto("/");

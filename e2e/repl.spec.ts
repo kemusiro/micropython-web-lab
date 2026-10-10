@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./workspace-test";
 
 test("does not mount private optional content in the managed build", async ({ page }) => {
   await page.goto("/");

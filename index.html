@@ -10,11 +10,11 @@
     />
     <title>MicroPython Web Lab</title>
   </head>
-  <body>
+  <body data-app-screen="experiment">
     <main class="shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">M19 · Editor tabs &amp; device samples</p>
+          <p class="eyebrow product-eyebrow" data-i18n="hero.eyebrow">ブラウザで試すMicroPython</p>
           <div class="product-title">
             <h1>MicroPython Web Lab</h1>
             <span class="alpha-badge" data-i18n="alpha.badge">公開α</span>
@@ -49,7 +49,17 @@
         <span id="local-device-name"></span>
       </aside>
 
+      <nav class="screen-navigation" aria-label="画面の切り替え" data-i18n-aria-label="experiment.navigation">
+        <button id="open-experiment-button" type="button" class="quiet" data-i18n="experiment.open">はじめの実験</button>
+        <button id="open-workspace-button" type="button" class="quiet" data-i18n="experiment.workspace">ワークスペースを開く</button>
+      </nav>
+
       <section id="workspace" class="workspace" aria-label="MicroPython REPL">
+        <section id="experiment-guide" class="experiment-guide" aria-labelledby="experiment-title">
+          <p id="experiment-step" class="eyebrow" data-i18n="experiment.stepRun">1 / 2 · 実行してみる</p>
+          <h2 id="experiment-title" data-i18n="experiment.titleRun">LEDを点滅させてみよう</h2>
+          <p id="experiment-instruction" data-i18n="experiment.instructionRun">「実行」を押すと、内蔵LEDが3回点滅します。配線の準備は必要ありません。</p>
+        </section>
         <div id="workspace-toolbar" class="toolbar">
           <div class="toolbar-group">
             <button id="restart-button" type="button" data-i18n="toolbar.restart">再起動</button>
@@ -88,12 +98,9 @@
                 wrap="off"
                 spellcheck="false"
                 aria-labelledby="code-editor-label"
-                aria-describedby="debugger-location"
-              >print("Script start")
-for number in range(3):
-    print(number)
-print("Script end")</textarea
-              >
+                aria-describedby="debugger-location editor-keyboard-hint"
+              ></textarea>
+              <span id="editor-keyboard-hint" class="visually-hidden" data-i18n="editor.focusHint">Escを押してからTabでエディタの外へ移動できます。⌘/Ctrl + Enterで実行できます。</span>
             </div>
             <aside
               id="debug-variable-panel"
@@ -122,6 +129,8 @@ print("Script end")</textarea
           <div class="editor-actions">
             <span data-i18n="editor.limit">実動時間は最大10秒・出力100,000文字です</span>
             <div class="editor-run-actions">
+              <button id="experiment-stop-button" class="danger experiment-control" type="button" hidden data-i18n="toolbar.stop">停止</button>
+              <button id="experiment-restart-button" class="quiet experiment-control" type="button" hidden data-i18n="experiment.restart">再起動して再試行</button>
               <button id="debug-script-button" class="quiet" type="button" disabled data-i18n="editor.debug">
                 デバッグ実行
               </button>
@@ -129,6 +138,24 @@ print("Script end")</textarea
             </div>
           </div>
         </form>
+
+        <section id="experiment-preview" class="experiment-preview" aria-labelledby="experiment-led-title">
+          <span class="experiment-led" id="experiment-led" data-on="false" aria-hidden="true"></span>
+          <h3 id="experiment-led-title" data-i18n="experiment.led">内蔵LED</h3>
+          <span id="experiment-led-state" data-i18n="experiment.ledOff">消灯</span>
+          <p data-i18n="experiment.watch">実行すると、ここが点滅します</p>
+        </section>
+        <section id="experiment-result" class="experiment-result" aria-label="実行結果" data-i18n-aria-label="experiment.result">
+          <p id="experiment-feedback" role="status" data-i18n="experiment.feedback.idle">準備ができたら「実行」を押してください。</p>
+          <details id="experiment-output-details" hidden>
+            <summary data-i18n="experiment.output">実行結果を見る</summary>
+            <pre id="experiment-output"></pre>
+          </details>
+          <div id="experiment-next" class="experiment-next" hidden>
+            <button id="experiment-button-example" type="button" data-i18n="experiment.buttonExample">ボタンを試す</button>
+            <button id="experiment-finish-button" class="quiet" type="button" data-i18n="experiment.continue">ワークスペースで続ける</button>
+          </div>
+        </section>
 
         <div
           id="workspace-row-resizer"

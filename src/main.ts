@@ -27,6 +27,8 @@ import {
 } from "./device-ui/reference-device-ui";
 import { deviceExampleSource, hasDeviceExample } from "./examples/device-examples";
 import { scenarioExampleSource } from "./examples/scenario-examples";
+import { FIRST_EXPERIMENT_SOURCE, FirstExperiment } from "./examples/first-experiment";
+import { loadAppScreen, saveAppScreen, type AppScreen } from "./layout/app-screen";
 import { changeEditorIndentation } from "./editor/indentation";
 import { RuntimeClient } from "./runtime/client";
 import {
@@ -68,6 +70,7 @@ import {
 
 const MAX_TERMINAL_CHARACTERS = 200_000;
 const AUTOSAVE_DELAY_MS = 400;
+const MAX_EXPERIMENT_OUTPUT_CHARACTERS = 4_000;
 
 const browserStorage = getBrowserStorage();
 const uiLocale = loadLocale(browserStorage, navigator.languages);
@@ -112,6 +115,19 @@ const connectionEditorRoot = requiredElement<HTMLDivElement>("connection-editor-
 const deviceUiInputStatus = requiredElement<HTMLParagraphElement>("device-ui-input-status");
 const localDeviceBanner = requiredElement<HTMLElement>("local-device-banner");
 const localDeviceName = requiredElement<HTMLSpanElement>("local-device-name");
+const openExperimentButton = requiredElement<HTMLButtonElement>("open-experiment-button");
+const openWorkspaceButton = requiredElement<HTMLButtonElement>("open-workspace-button");
+const experimentStopButton = requiredElement<HTMLButtonElement>("experiment-stop-button");
+const experimentRestartButton = requiredElement<HTMLButtonElement>("experiment-restart-button");
+const experimentStep = requiredElement<HTMLParagraphElement>("experiment-step");
+const experimentTitle = requiredElement<HTMLHeadingElement>("experiment-title");
+const experimentInstruction = requiredElement<HTMLParagraphElement>("experiment-instruction");
+const experimentFeedback = requiredElement<HTMLParagraphElement>("experiment-feedback");
+const experimentOutputDetails = requiredElement<HTMLDetailsElement>("experiment-output-details");
+const experimentOutput = requiredElement<HTMLPreElement>("experiment-output");
+const experimentLed = requiredElement<HTMLSpanElement>("experiment-led");
+const experimentLedState = requiredElement<HTMLSpanElement>("experiment-led-state");
+const experimentNext = requiredElement<HTMLDivElement>("experiment-next");
 const examplesSection = requiredElement<HTMLElement>("examples-title").closest<HTMLElement>(
   ".examples",
 );
@@ -129,7 +145,7 @@ installWorkspaceResizers({
   storage: browserStorage,
 });
 
-installWorkspaceViews({
+const workspaceViews = installWorkspaceViews({
   workspace,
   editorPanel: scriptForm,
   editorCodeArea: requiredElement<HTMLElement>("editor-code-area"),
@@ -166,11 +182,17 @@ if (__WEB_LAB_LOCAL_MODE__) {
 const terminalScreen = new TerminalScreen();
 let terminalFrame: number | null = null;
 let terminalInputComposing = false;
+let editorTabMovesFocus = false;
 let replExecutionPending = false;
 let autosaveTimer: number | null = null;
 let activeDebuggerLine: number | null = null;
 const lastDeviceSequences = new Map<string, number>();
-const initialScript = codeEditor.value;
+const initialScript = FIRST_EXPERIMENT_SOURCE;
+codeEditor.value = initialScript;
+const experiment = new FirstExperiment();
+let appScreen: AppScreen = "workspace";
+let experimentTabId: string | null = null;
+let currentRuntimeStatus: RuntimeStatus = "stopped";
 let editorTabs: EditorWorkspaceTab[] = [
   { id: "main", title: "main.py", source: initialScript },
 ];
@@ -325,7 +347,35 @@ debugScriptButton.addEventListener("click", () => {
 codeEditor.maxLength = MAX_SCRIPT_CHARACTERS;
 replInput.maxLength = MAX_SCRIPT_CHARACTERS;
 terminalDirectInput.maxLength = MAX_SCRIPT_CHARACTERS;
-restoreEditorWorkspace();
+const restoredWorkspace = restoreEditorWorkspace();
+appScreen = loadAppScreen(browserStorage, {
+  hasSavedWorkspace: restoredWorkspace === "loaded",
+  storageError: restoredWorkspace === "invalid" || (restoredWorkspace === "unavailable" && browserStorage !== null),
+  localMode: __WEB_LAB_LOCAL_MODE__,
+});
+if (appScreen === "experiment") experimentTabId = activeEditorTabId;
+if (!__WEB_LAB_LOCAL_MODE__) saveAppScreen(browserStorage, appScreen);
+renderAppScreen();
+openWorkspaceButton.addEventListener("click", () => showAppScreen("workspace"));
+openExperimentButton.addEventListener("click", () => {
+  if (codeEditor.readOnly) return;
+  if (editorTabs.some((tab) => tab.id === experimentTabId)) {
+    selectEditorTab(experimentTabId!);
+  } else {
+    if (!openEditorTab(t("experiment.sampleTitle"), FIRST_EXPERIMENT_SOURCE)) return;
+    experimentTabId = activeEditorTabId;
+  }
+  experiment.reset();
+  experimentOutput.textContent = "";
+  experimentOutputDetails.hidden = true;
+  experimentOutputDetails.open = false;
+  showAppScreen("experiment");
+});
+requiredElement<HTMLButtonElement>("experiment-finish-button").addEventListener("click", () => showAppScreen("workspace"));
+requiredElement<HTMLButtonElement>("experiment-button-example").addEventListener("click", () => {
+  showAppScreen("workspace");
+  openDeviceExample("button-gp15");
+});
 languageSelect.value = uiLocale;
 languageSelect.addEventListener("change", () => {
   const selectedLocale = languageSelect.value;
@@ -346,6 +396,15 @@ codeEditor.addEventListener("input", () => {
 });
 codeEditor.addEventListener("scroll", updateDebuggerLineMarker);
 codeEditor.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    editorTabMovesFocus = true;
+    return;
+  }
+  if (event.key === "Tab" && editorTabMovesFocus) {
+    editorTabMovesFocus = false;
+    return;
+  }
+  editorTabMovesFocus = false;
   if (event.key === "Tab" && !codeEditor.readOnly) {
     event.preventDefault();
     const selectionDirection = codeEditor.selectionDirection;
@@ -419,15 +478,19 @@ replInput.addEventListener("keydown", (event) => {
   }
 });
 
-restartButton.addEventListener("click", () => {
+const restartRuntime = (): void => {
   appendTerminal(t("system.restarting"));
   runtime.restart();
-});
+};
+restartButton.addEventListener("click", restartRuntime);
+experimentRestartButton.addEventListener("click", restartRuntime);
 
-stopButton.addEventListener("click", () => {
+const stopRuntime = (): void => {
   runtime.stop();
   appendTerminal(t("system.stopped"));
-});
+};
+stopButton.addEventListener("click", stopRuntime);
+experimentStopButton.addEventListener("click", stopRuntime);
 
 clearButton.addEventListener("click", () => {
   terminalScreen.clear();
@@ -627,6 +690,12 @@ function runCurrentScript(mode: ScriptExecutionMode): void {
   const source = codeEditor.value;
   if (source.trim().length === 0) {
     appendTerminal(t("system.enterCode"));
+    if (appScreen === "experiment") {
+      experiment.feedback = "error";
+      appendExperimentOutput(t("experiment.enterCode"));
+      experimentOutputDetails.open = true;
+      renderExperiment();
+    }
     return;
   }
 
@@ -642,16 +711,70 @@ function runCurrentScript(mode: ScriptExecutionMode): void {
   }
 
   optionalContentIntegration.executionStarted(source, mode);
+  if (appScreen === "experiment" && mode === "run") {
+    experiment.start(source);
+    experimentOutput.textContent = "";
+    experimentOutputDetails.hidden = true;
+    experimentOutputDetails.open = false;
+    renderExperiment();
+  }
   appendTerminal(
     mode === "debug" ? t("system.debugStarted") : t("system.runStarted"),
   );
 }
 
-function restoreEditorWorkspace(): void {
+function showAppScreen(screen: AppScreen): void {
+  appScreen = screen;
+  saveAppScreen(browserStorage, screen);
+  if (screen === "experiment") workspaceViews.reset();
+  renderAppScreen();
+  // The navigation control being activated becomes hidden in the new screen.
+  (screen === "experiment" ? codeEditor : restartButton).focus({ preventScroll: true });
+}
+
+function renderAppScreen(): void {
+  document.body.dataset.appScreen = appScreen;
+  openExperimentButton.hidden = appScreen === "experiment" || __WEB_LAB_LOCAL_MODE__;
+  openWorkspaceButton.hidden = appScreen === "workspace";
+  runScriptButton.textContent = t(appScreen === "experiment" ? "experiment.run" : "editor.run");
+  renderExperiment();
+}
+
+function renderExperiment(): void {
+  const stage = experiment.stage;
+  const suffix = ({ run: "Run", edit: "Edit", complete: "Complete" } as const)[stage];
+  experimentStep.textContent = t(`experiment.step${suffix}`);
+  experimentTitle.textContent = t(`experiment.title${suffix}`);
+  experimentInstruction.textContent = t(`experiment.instruction${suffix}`);
+  experimentFeedback.textContent = currentRuntimeStatus === "starting"
+    ? t("experiment.feedback.starting")
+    : currentRuntimeStatus === "error"
+      ? t("experiment.feedback.unavailable")
+      : currentRuntimeStatus === "stopped"
+        ? t("experiment.feedback.stopped")
+        : t(`experiment.feedback.${experiment.feedback}`);
+  const inExperiment = appScreen === "experiment";
+  experimentStopButton.hidden = !inExperiment || currentRuntimeStatus !== "executing";
+  experimentRestartButton.hidden = !inExperiment || (currentRuntimeStatus !== "stopped" && currentRuntimeStatus !== "error");
+  if (document.activeElement === experimentStopButton && experimentStopButton.hidden) {
+    (experimentRestartButton.hidden ? runScriptButton : experimentRestartButton).focus({ preventScroll: true });
+  }
+  experimentNext.hidden = stage !== "complete";
+  for (const button of experimentNext.querySelectorAll<HTMLButtonElement>("button")) {
+    button.disabled = currentRuntimeStatus !== "ready";
+  }
+}
+
+function appendExperimentOutput(data: string): void {
+  experimentOutput.textContent = ((experimentOutput.textContent ?? "") + data).slice(-MAX_EXPERIMENT_OUTPUT_CHARACTERS);
+  experimentOutputDetails.hidden = false;
+}
+
+function restoreEditorWorkspace(): "empty" | "loaded" | "invalid" | "unavailable" {
   if (draftStorage === null) {
     setDraftStatus(t("draft.unavailable"), "error");
     renderEditorTabs();
-    return;
+    return "unavailable";
   }
 
   const result = loadEditorWorkspace(draftStorage);
@@ -674,6 +797,7 @@ function restoreEditorWorkspace(): void {
       break;
   }
   renderEditorTabs();
+  return result.status;
 }
 
 function scheduleDraftSave(): void {
@@ -781,13 +905,13 @@ function selectEditorTab(tabId: string): void {
   codeEditor.focus();
 }
 
-function openEditorTab(title: string, source: string): void {
+function openEditorTab(title: string, source: string): boolean {
   if (codeEditor.readOnly) {
-    return;
+    return false;
   }
   if (editorTabs.length >= MAX_EDITOR_TABS) {
     setDraftStatus(t("editor.tabLimit", { count: MAX_EDITOR_TABS }), "error");
-    return;
+    return false;
   }
   updateActiveEditorTabSource(codeEditor.value);
   editorTabSequence += 1;
@@ -800,6 +924,7 @@ function openEditorTab(title: string, source: string): void {
   renderEditorTabs();
   scheduleDraftSave();
   codeEditor.focus();
+  return true;
 }
 
 function closeEditorTab(tabId: string): void {
@@ -870,16 +995,27 @@ function handleRuntimeMessage(message: WorkerToMainMessage): void {
       appendTerminal(t("system.softReset"));
       break;
     case "stdout":
+      if (experiment.running) appendExperimentOutput(message.data);
       optionalContentIntegration.stdout(message.data);
       appendTerminal(message.data);
       break;
     case "stderr":
+      if (experiment.running) appendExperimentOutput(message.data);
       appendTerminal(message.data);
       break;
     case "error":
+      appendExperimentOutput(message.message);
+      experimentOutputDetails.open = true;
+      renderExperiment();
       appendTerminal(`\n[runtime error] ${message.message}\n`);
       break;
     case "execution-result":
+      if (experiment.running) {
+        if (!message.ok && message.error) appendExperimentOutput(message.error);
+        experiment.finish(message.ok);
+        experimentOutputDetails.open = !message.ok;
+        renderExperiment();
+      }
       optionalContentIntegration.executionFinished(message.ok);
       if (message.ok) {
         appendTerminal(t("system.runComplete"));
@@ -990,6 +1126,11 @@ function renderDeviceState(state: RuntimeDeviceState): void {
     return;
   }
   lastDeviceSequences.set(sequenceKey, state.sequence);
+  if (state.pinId === "LED" && state.mode === "output") {
+    experimentLed.dataset.on = String(state.value === 1);
+    experimentLedState.textContent = t(state.value === 1 ? "experiment.ledOn" : "experiment.ledOff");
+    experiment.observeLed(state.value === 1);
+  }
   optionalContentIntegration.deviceState(state);
 }
 
@@ -1093,7 +1234,11 @@ function clearDebuggerWorkspace(): void {
 }
 
 function updateRuntimeStatus(status: RuntimeStatus): void {
+  currentRuntimeStatus = status;
   if (status === "starting" || status === "stopped" || status === "error") {
+    experiment.interrupt();
+    experimentLed.dataset.on = "false";
+    experimentLedState.textContent = t("experiment.ledOff");
     replExecutionPending = false;
     resetVirtualBoardState();
     deviceUiRenderer.reset();
@@ -1110,6 +1255,7 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
 
   sendButton.disabled = status !== "ready";
   const sourceLocked = status === "executing" || status === "debugging";
+  openExperimentButton.disabled = sourceLocked;
   codeEditor.readOnly = sourceLocked;
   renderEditorTabs();
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-device-example]")) {
@@ -1140,6 +1286,7 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
       ? t("debugger.requiresIsolation")
       : t("debugger.description");
   stopButton.disabled = status === "stopped";
+  renderExperiment();
   optionalContentIntegration.runtimeStatusChanged(status);
 }
 

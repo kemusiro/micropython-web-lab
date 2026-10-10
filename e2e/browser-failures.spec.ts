@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./workspace-test";
 import { browserFixture } from "../scripts/lib/browser-fixture.mjs";
 
 test("missing isolation visibly disables shared inputs while REPL remains usable", async ({ page }) => {

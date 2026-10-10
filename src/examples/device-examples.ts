@@ -16,9 +16,21 @@ print("Virtual LED blink complete")`;
 
 function buttonExampleSource(pin: number): string {
   return `from machine import Pin
+from time import sleep_ms, ticks_diff, ticks_ms
 
 button = Pin(${pin}, Pin.IN, Pin.PULL_UP)
-print("Button:", "pressed" if button.value() == 0 else "released")`;
+print("Press and release GPIO ${pin} for 8 seconds")
+
+previous = None
+started = ticks_ms()
+while ticks_diff(ticks_ms(), started) < 8000:
+    current = button.value()
+    if current != previous:
+        print("Button:", "pressed" if current == 0 else "released")
+        previous = current
+    sleep_ms(20)
+
+print("Button test complete")`;
 }
 
 const ANALOG_EXAMPLE = `from machine import ADC, Pin
