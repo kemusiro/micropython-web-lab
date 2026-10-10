@@ -21,7 +21,18 @@ for (const width of [1280, 390]) {
     await page.locator("#code-editor").fill("answer = 9\n");
     await page.locator("#save-draft-button").click();
     await expect(page.locator("#save-draft-button")).toBeEnabled();
-    await moved.dragTo(page.locator("#project-root-select"));
+    const root = page.locator("#project-root-select");
+    // Reveal the root before holding the mouse: scrolling it out from under
+    // the sticky toolbar during dragTo changes the drag's starting coordinates.
+    await root.evaluate(element => element.scrollIntoView({ block: "center" }));
+    await moved.hover();
+    await page.mouse.down();
+    try {
+      // Two moves reliably dispatch dragover in the supported browsers.
+      await root.hover();
+      await root.hover();
+      await expect(root).toHaveAttribute("data-drop-active", "true");
+    } finally { await page.mouse.up(); }
     await expect(source).toBeVisible();
     await expect(moved).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "helper.py", exact: true })).toHaveAttribute("title", "/project/helper.py");
