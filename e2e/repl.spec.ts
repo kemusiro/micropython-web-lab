@@ -1343,6 +1343,32 @@ test("keeps the board stable while dragging from the lower RGB LED", async ({ pa
   ).toBeInViewport();
 });
 
+test("keeps the Pico inside the visible end of the wiring canvas", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/");
+  await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
+  await page.locator(".connection-editor-panel summary").click();
+  const panel = page.locator(".virtual-board-panel");
+  const board = page.locator(".connection-board-node");
+  await page.locator('[data-connection-port="ostamc5a31a-vv.red"] .connection-socket').scrollIntoViewIfNeeded();
+  await panel.evaluate(element => window.scrollBy(0, element.getBoundingClientRect().top + 56));
+  // Scrolling near the last device leaves less canvas than panel in view.
+  // Font metrics and native scrollbars make this happen naturally on Windows.
+  await panel.evaluate(element => {
+    const canvas = element.querySelector(".connection-editor-canvas")!;
+    const top = Math.max(element.getBoundingClientRect().top, 0);
+    element.scrollTop += canvas.getBoundingClientRect().bottom - (top + 360);
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const panel = document.querySelector(".virtual-board-panel")!.getBoundingClientRect();
+    const canvas = document.querySelector(".connection-editor-canvas")!.getBoundingClientRect();
+    const board = document.querySelector(".connection-board-node")!.getBoundingClientRect();
+    return board.top >= Math.max(panel.top, 0) &&
+      board.bottom <= Math.min(panel.bottom, canvas.bottom, document.documentElement.clientHeight);
+  })).toBe(true);
+  await expect(board).toBeInViewport();
+});
+
 test("anchors wires to the Pico edge when their pins are scrolled out of view", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
