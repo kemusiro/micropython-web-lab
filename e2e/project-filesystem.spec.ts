@@ -1,0 +1,206 @@
+import { test, expect } from "./workspace-test";
+import { readFile } from "node:fs/promises";
+import { deflateRawSync } from "node:zlib";
+import { ProjectFiles } from "../src/project/filesystem";
+import { exportProjectZip, importProjectZip } from "../src/project/zip";
+
+test("Python-created files survive restart, page reload and deletion", async ({ page }) => {
+  await page.goto("/");
+  const ready = page.getByText("実行可能", { exact: true });
+  const terminal = page.locator("#terminal");
+  await expect(ready).toBeVisible();
+  await page.locator("#code-editor").fill("with open('helper.py', 'w') as f:\n f.write('answer = 42\\n')\nimport helper\nprint('imported', helper.answer)");
+  await page.locator("#run-script-button").click();
+  await expect(terminal).toContainText("imported 42");
+  await expect(page.locator("#draft-status")).toContainText("このブラウザに保存済み");
+  await page.locator("#restart-button").click();
+  await expect(ready).toBeVisible();
+  await page.locator("#repl-input").fill("import helper; print('restart-file', helper.answer)");
+  await page.locator("#send-button").click();
+  await expect(terminal).toContainText("restart-file 42");
+  await page.reload(); await expect(ready).toBeVisible();
+  await page.locator("#repl-input").fill("import helper; print('reload-file', helper.answer)");
+  await page.locator("#send-button").click(); await expect(terminal).toContainText("reload-file 42");
+  await page.locator("#repl-input").fill("import os; os.remove('helper.py')"); await page.locator("#send-button").click();
+  await expect(page.locator("#draft-status")).toContainText("このブラウザに保存済み");
+  await page.reload(); await expect(ready).toBeVisible();
+  await page.locator("#repl-input").fill("import os; print('deleted-file', 'helper.py' in os.listdir())"); await page.locator("#send-button").click();
+  await expect(terminal).toContainText("deleted-file False");
+});
+
+test("retreats files outside a stuck worker and enforces the 4 MiB quota", async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.goto("/"); const ready = page.getByText("実行可能", { exact: true }); const terminal = page.locator("#terminal");
+  await expect(ready).toBeVisible();
+  await page.locator("#code-editor").fill("import time\nwith open('before-loop.txt', 'w') as f:\n f.write('kept')\nfor i in range(10):\n with open('before-loop.txt', 'a') as f:\n  f.write('!')\n time.sleep_ms(100)\nwhile True:\n pass");
+  await page.locator("#run-script-button").click();
+  await expect(terminal).toContainText("実行時間が10秒", { timeout: 15_000 }); await expect(ready).toBeVisible();
+  await page.locator("#repl-input").fill("print('recovered-file', open('before-loop.txt').read())"); await page.locator("#send-button").click();
+  await expect(terminal).toContainText("recovered-file kept");
+  await page.locator("#code-editor").fill("import os\ntry:\n with open('large.bin', 'wb') as f:\n  while True:\n   f.write(b'x' * 4096)\nexcept OSError as error:\n print('quota-error', error)\nprint('large-size', os.stat('large.bin')[6])");
+  await page.locator("#run-script-button").click(); await expect(terminal).toContainText("quota-error"); await expect(ready).toBeVisible();
+  await expect(page.locator("#runtime-status")).toHaveText("実行可能");
+  await page.locator("#repl-input").fill("os.remove('large.bin'); print('quota-recovered')"); await page.locator("#send-button").click();
+  await expect(terminal).toContainText("quota-recovered");
+});
+
+test("imports ordinary ZIPs, selects an outer directory and exports an editable archive", async ({ page }) => {
+  await page.goto("/"); const ready = page.getByText("実行可能", { exact: true }); await expect(ready).toBeVisible();
+  await page.locator("#project-files summary").click();
+  const files = new ProjectFiles(); files.write("my-project/main.py", new TextEncoder().encode("from drivers.helper import answer\r\nprint('zip-answer', answer)\r\n"));
+  files.write("my-project/drivers/__init__.py", new Uint8Array()); files.write("my-project/drivers/helper.py", new TextEncoder().encode("answer = 99\n")); files.mkdir("my-project/empty");
+  await page.locator("#project-zip-file").setInputFiles({ name: "ordinary.zip", mimeType: "application/zip", buffer: Buffer.from(exportProjectZip(files.snapshot())) });
+  await expect(page.locator("#project-zip-import")).toBeVisible(); await page.locator("#project-zip-root").selectOption("my-project");
+  page.once("dialog", dialog => dialog.accept()); await page.locator("#project-zip-import").click(); await expect(ready).toBeVisible();
+  await page.locator("#run-script-button").click(); await expect(page.locator("#terminal")).toContainText("zip-answer 99"); await expect(ready).toBeVisible();
+  const downloadPromise = page.waitForEvent("download"); await page.locator("#project-zip-export").click(); const download = await downloadPromise;
+  const bytes = new Uint8Array(await readFile((await download.path())!));
+  const exported = await importProjectZip(bytes);
+  expect(exported.entries.some(entry => entry.path === "empty" && entry.kind === "directory")).toBe(true);
+  expect(exported.entries.some(entry => entry.path === "drivers/helper.py")).toBe(true);
+  const main = exported.entries.find(entry => entry.path === "main.py");
+  expect(main?.kind === "file" && new TextDecoder().decode(main.data)).toBe("from drivers.helper import answer\r\nprint('zip-answer', answer)\r\n");
+  await page.locator("#project-zip-file").setInputFiles({ name: "bad.zip", mimeType: "application/zip", buffer: Buffer.from("not a zip") });
+  await expect(page.locator("#draft-status")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#project-file-tree [data-path='drivers/helper.py']")).toHaveCount(1);
+});
+
+test("saves an editor file in a nested directory and opens it after reload", async ({ page }) => {
+  await page.goto("/"); await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
+  await page.locator("#project-files summary").click(); await page.locator("#code-editor").fill("answer = 7\n");
+  await page.locator("#project-file-path").fill("lib/custom.py"); await page.locator("#project-file-save-as").click();
+  await expect(page.locator("#draft-status")).toContainText("このブラウザに保存済み");
+  await page.reload(); await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
+  await expect(page.locator("#code-editor")).toHaveValue("answer = 7\n");
+  await page.locator("#repl-input").fill("import custom; print('saved-import', custom.answer)"); await page.locator("#send-button").click();
+  await expect(page.locator("#terminal")).toContainText("saved-import 7");
+  await page.locator("#project-files summary").click();
+  await page.locator(".editor-tab-new").click();
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "custom.pyを閉じる", exact: true }).click();
+  await page.locator("#project-file-tree [data-path='lib'] > .project-tree-row").click();
+  await page.locator("#project-file-tree [data-path='lib/custom.py'] > .project-tree-row").click();
+  await page.locator("#project-file-open").click();
+  await expect(page.locator("#code-editor")).toHaveValue("answer = 7\n");
+  await page.locator("#project-file-tree [data-path='lib/custom.py'] > .project-tree-row").click();
+  await page.locator("#project-file-path").fill("drivers/custom.py");
+  await page.locator("#project-file-rename").click();
+  await expect(page.locator("#project-file-tree [data-path='drivers/custom.py']")).toHaveCount(1);
+  page.once("dialog", dialog => dialog.accept());
+  await page.locator("#project-file-tree [data-path='drivers'] > .project-tree-row").click();
+  await page.locator("#project-file-tree [data-path='drivers/custom.py'] > .project-tree-row").click();
+  await page.locator("#project-file-delete").click();
+  await expect(page.locator("#project-file-tree [data-path='drivers/custom.py']")).toHaveCount(0);
+});
+
+test("reads external Deflate ZIPs with data descriptors in the browser", async ({ page }) => {
+  const data = new TextEncoder().encode("print('external-deflate')\n");
+  const files = new ProjectFiles(); files.write("main.py", data);
+  const original = exportProjectZip(files.snapshot());
+  const compressed = deflateRawSync(data);
+  const localEnd = 37, originalCentral = localEnd + data.length;
+  const central = localEnd + compressed.length + 16;
+  const zip = new Uint8Array(original.length - data.length + compressed.length + 16);
+  zip.set(original.subarray(0, localEnd)); zip.set(compressed, localEnd); zip.set(original.subarray(originalCentral), central);
+  const view = new DataView(zip.buffer);
+  view.setUint16(6, 0x808, true); view.setUint16(8, 8, true);
+  view.setUint32(14, 0, true); view.setUint32(18, 0, true); view.setUint32(22, 0, true);
+  view.setUint32(central - 16, 0x08074b50, true);
+  view.setUint32(central - 12, new DataView(original.buffer).getUint32(originalCentral + 16, true), true);
+  view.setUint32(central - 8, compressed.length, true); view.setUint32(central - 4, data.length, true);
+  view.setUint16(central + 8, 0x808, true); view.setUint16(central + 10, 8, true); view.setUint32(central + 20, compressed.length, true);
+  view.setUint32(zip.length - 6, central, true);
+  await page.goto("/"); await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
+  await page.locator("#project-files summary").click();
+  await page.locator("#project-zip-file").setInputFiles({ name: "deflate.zip", mimeType: "application/zip", buffer: Buffer.from(zip) });
+  await expect(page.locator("#project-zip-import")).toBeVisible();
+  page.once("dialog", dialog => dialog.accept()); await page.locator("#project-zip-import").click();
+  await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
+  await page.locator("#run-script-button").click(); await expect(page.locator("#terminal")).toContainText("external-deflate");
+});
+
+test("failed IndexedDB writes preserve the current project during ZIP replacement", async ({ page }) => {
+  await page.addInitScript(() => {
+    IDBObjectStore.prototype.put = () => { throw new DOMException("forced quota error", "QuotaExceededError"); };
+  });
+  await page.goto("/"); await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
+  const source = await page.locator("#code-editor").inputValue();
+  await page.locator("#project-files summary").click();
+  const files = new ProjectFiles(); files.write("replacement.py", new TextEncoder().encode("print('replacement')"));
+  await page.locator("#project-zip-file").setInputFiles({ name: "replacement.zip", mimeType: "application/zip", buffer: Buffer.from(exportProjectZip(files.snapshot())) });
+  await expect(page.locator("#project-zip-import")).toBeVisible();
+  page.once("dialog", dialog => dialog.accept()); await page.locator("#project-zip-import").click();
+  await expect(page.locator("#draft-status")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#code-editor")).toHaveValue(source);
+  await expect(page.locator("#project-file-tree [data-path='replacement.py']")).toHaveCount(0);
+});
+
+
+test("Python deletion of an open editor file is not undone by subsequent saves", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
+  await page.locator("#repl-input").fill("import os; os.remove('main.py'); print('open-file-deleted')");
+  await page.locator("#send-button").click();
+  await expect(page.locator("#terminal")).toContainText("open-file-deleted");
+  await expect(page.locator("#code-editor")).toHaveValue("");
+  await page.locator("#save-draft-button").click();
+  await expect(page.locator("#draft-status")).toContainText("このブラウザに保存済み");
+  await page.locator("#repl-input").fill("print('deleted-content', 'main.py' in os.listdir())");
+  await page.locator("#send-button").click();
+  await expect(page.locator("#terminal")).toContainText("deleted-content False");
+});
+
+for (const width of [1280, 390]) {
+  test(`navigates nested project files with mouse and keyboard at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
+    await page.locator("#repl-input").fill("import os; os.mkdir('drivers'); os.mkdir('drivers/sensors'); os.mkdir('empty'); open('drivers/sensors/a.py', 'w').write('answer = 42\\n'); open('drivers/sensors/b.py', 'w').write('answer = 7\\n'); print('tree-created')");
+    await page.locator("#send-button").click();
+    await expect(page.locator("#terminal")).toContainText("tree-created");
+    await page.locator("#project-files summary").click();
+    const tree = page.getByRole("tree", { name: "プロジェクトファイル" });
+    const drivers = tree.getByRole("treeitem", { name: "drivers", exact: true });
+    const sensors = tree.getByRole("treeitem", { name: "sensors", exact: true });
+    const a = tree.getByRole("treeitem", { name: "a.py", exact: true });
+    const b = tree.getByRole("treeitem", { name: "b.py", exact: true });
+    await expect(drivers).toHaveAttribute("aria-expanded", "false");
+    await expect(a).toBeHidden();
+    await drivers.press("ArrowRight");
+    await expect(drivers).toHaveAttribute("aria-expanded", "true");
+    await drivers.press("ArrowRight");
+    await expect(sensors).toBeFocused();
+    await sensors.press("ArrowRight");
+    await sensors.press("ArrowRight");
+    await expect(a).toBeFocused();
+    await a.press("Enter");
+    await expect(page.locator("#code-editor")).toHaveValue("answer = 42\n");
+    await a.press("ArrowDown");
+    await expect(b).toBeFocused();
+    await expect(b).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#project-file-path")).toHaveValue("drivers/sensors/b.py");
+    await b.press("ArrowLeft");
+    await expect(sensors).toBeFocused();
+    await sensors.press("ArrowLeft");
+    await expect(sensors).toHaveAttribute("aria-expanded", "false");
+    await expect(a).toBeHidden();
+    await sensors.locator(":scope > .project-tree-row").click();
+    await b.locator(":scope > .project-tree-row").dblclick();
+    await expect(page.locator("#code-editor")).toHaveValue("answer = 7\n");
+    await page.locator("#repl-input").fill("open('drivers/sensors/b.py', 'w').write('answer = 8\\n'); print('tree-updated')");
+    await page.locator("#send-button").click();
+    await expect(page.locator("#terminal")).toContainText("tree-updated");
+    await expect(sensors).toHaveAttribute("aria-expanded", "true");
+    await expect(b).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#code-editor")).toHaveValue("answer = 8\n");
+    await expect(tree.locator('[tabindex="0"]')).toHaveCount(1);
+    const empty = tree.getByRole("treeitem", { name: "empty", exact: true });
+    await empty.press("ArrowRight");
+    await empty.press("ArrowRight");
+    await expect(empty).toBeFocused();
+    await empty.press("Home");
+    await expect(drivers).toBeFocused();
+    const bounds = await tree.boundingBox();
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+  });
+}

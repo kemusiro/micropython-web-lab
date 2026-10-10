@@ -21,7 +21,7 @@ class Pdb:
         self._target_frame = None
 
     def _trace(self, frame, event, arg):
-        if frame.f_code.co_filename != "main.py":
+        if frame.f_code.co_filename != self._filename:
             return self._trace
 
         should_stop = False
@@ -47,7 +47,7 @@ class Pdb:
         frames = []
         cursor = frame
         while cursor is not None:
-            if cursor.f_code.co_filename == "main.py":
+            if cursor.f_code.co_filename == self._filename:
                 frames.append(cursor)
             cursor = cursor.f_back
         selected = 0
@@ -210,7 +210,7 @@ class Pdb:
     def _snapshot_globals(self, frame):
         variables = []
         for name in sorted(frame.f_globals):
-            if name in _pdb_reserved_globals or name.startswith("_pdb_"):
+            if name in _pdb_reserved_globals or name.startswith("_pdb_") or name == "__file__":
                 continue
             try:
                 value = frame.f_globals[name]
@@ -244,12 +244,13 @@ class Pdb:
         print("c(ontinue)         次のブレークポイントまで実行")
         print("q(uit)             Workerを再生成して終了")
 
-    def _run(self, source, globals_dict=None, locals_dict=None):
+    def _run(self, source, globals_dict=None, locals_dict=None, filename="main.py"):
         if globals_dict is None:
             globals_dict = _pdb_main_globals
         if locals_dict is None:
             locals_dict = globals_dict
         self._source_lines = source.split("\n")
+        self._filename = filename
         self._running = True
         self._mode = "step"
         self._target_frame = None
@@ -257,7 +258,7 @@ class Pdb:
         self._last_command = ""
         _pdb_sys.settrace(self._trace)
         try:
-            code = compile(source, "main.py", "exec")
+            code = compile(source, filename, "exec")
             exec(code, globals_dict, locals_dict)
         finally:
             self._running = False
@@ -294,8 +295,8 @@ class _PdbModule:
     def runcall(self, function, *args, **kwargs):
         return _pdb_default.runcall(function, *args, **kwargs)
 
-    def _run(self, source):
-        return _pdb_default._run(source)
+    def _run(self, source, filename="main.py"):
+        return _pdb_default._run(source, filename=filename)
 
 
 _pdb_sys.modules["pdb"] = _PdbModule()

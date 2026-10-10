@@ -50,6 +50,8 @@ for (const moduleName of ["js", "jsffi", "socket", "network"]) {
 }
 
 let ledValue = 0;
+// Fixed-heap collection must work during long operations, not just at startup.
+await micropython.runPythonAwaitable("import gc\nfor _ in range(2048):\n _temporary = b'x' * 4096\ngc.collect()");
 micropython.registerJsModule("machine", {
   Pin: () => ({
     on() {

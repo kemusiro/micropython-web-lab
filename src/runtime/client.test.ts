@@ -68,6 +68,7 @@ describe("RuntimeClient", () => {
     expect(worker.postMessage).toHaveBeenLastCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "input",
+      requestId: "input-1",
       data: "1 + 2\n",
     });
     expect(statuses).toEqual(["starting", "ready"]);
@@ -510,6 +511,7 @@ describe("RuntimeClient", () => {
         type: "stdout",
         data: "... ",
       });
+      worker.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-ready", requestId: "input-1" });
       vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS);
 
       expect(worker.terminate).not.toHaveBeenCalled();
@@ -551,7 +553,7 @@ describe("Worker reset and output-limit control messages", () => {
 });
 
 
-it("rearms the REPL timer after a queued earlier prompt cleared it", () => {
+it("ignores output prompts and stale acknowledgments during REPL execution", () => {
   vi.useFakeTimers();
   try {
     const first = new FakeWorker();
@@ -565,11 +567,36 @@ it("rearms the REPL timer after a queued earlier prompt cleared it", () => {
     first.emit(readyMessage);
     client.sendInput("\x04");
     first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "stdout", data: "\r\n... " });
-    first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-executing" });
+    first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-executing", requestId: "input-1" });
+    first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-ready", requestId: "input-stale" });
     vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS);
     expect(first.terminate).toHaveBeenCalledOnce();
     expect(client.status).toBe("starting");
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("waits for durable checkpoints before reporting completion and restores files in new workers", async () => {
+  vi.useFakeTimers();
+  try {
+    const first = new FakeWorker(), second = new FakeWorker();
+    const workers = [first, second];
+    let finish!: () => void;
+    const saved = new Promise<void>(resolve => { finish = resolve; });
+    const onMessage = vi.fn();
+    const project = { version: 1 as const, entries: [{ kind: "file" as const, path: "data", data: new Uint8Array([42]) }] };
+    const client = new RuntimeClient({ onMessage, onStatus: vi.fn(), onCheckpoint: () => saved }, () => workers.shift()!, { project: { version: 1, entries: [] } });
+    client.start(); first.emit(readyMessage);
+    client.executeScript("print(42)");
+    first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "filesystem", revision: 1, checkpoint: true, project });
+    const completion = first.onmessage!({ data: { version: RUNTIME_PROTOCOL_VERSION, type: "execution-result", requestId: "execution-1", ok: true } } as MessageEvent);
+    expect(client.status).toBe("executing");
+    vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS * 2);
+    expect(first.terminate).not.toHaveBeenCalled();
+    finish(); await completion;
+    expect(client.status).toBe("ready");
+    client.restart();
+    expect(second.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "start", project }));
+  } finally { vi.useRealTimers(); }
 });

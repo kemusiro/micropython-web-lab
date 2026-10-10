@@ -43,6 +43,7 @@ import {
   MAX_SCRIPT_CHARACTERS,
   RUNTIME_PROTOCOL_VERSION,
   isWorkerToMainMessage,
+  isMainToWorkerMessage,
   type DebuggerVariable,
   type MainToWorkerMessage,
   type WorkerToMainMessage,
@@ -50,18 +51,25 @@ import {
 import { SharedDebuggerChannel, type DebuggerChannelTransfer } from "./debugger-channel";
 import { WEB_LAB_PDB_SOURCE } from "./pdb-module";
 import { RuntimeOutputBuffer } from "./output-buffer";
-import { processReplInput } from "./repl-input";
-import { recoverReplFromBridgeError } from "./repl-bridge-error";
+import { processReplInputAsync } from "./repl-input";
+import { formatReplBridgeError } from "./repl-bridge-error";
 import type { ConnectionGraphV1 } from "../connections/connection-model";
 import { localDeviceBundle } from "virtual:local-device";
+import { RuntimeProjectFilesystem } from "./project-filesystem";
+import type { ProjectSnapshot } from "../project/filesystem";
 
 declare const self: DedicatedWorkerGlobalScope;
 
 let micropython: MicroPythonInstance | null = null;
+let projectFilesystem: RuntimeProjectFilesystem | null = null;
 let activeDeviceHost: DeviceHost | null = null;
 let debuggerChannel: SharedDebuggerChannel | null = null;
 let activeDebuggerRequestId: string | null = null;
 let starting = false;
+let scriptExecuting = false;
+let queuedInputCharacters = 0;
+let inputQueue = Promise.resolve();
+let replResetRequested = false;
 const output = new RuntimeOutputBuffer(
   (type, data) => self.postMessage({ version: RUNTIME_PROTOCOL_VERSION, type, data }),
   () => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "output-limit" }),
@@ -70,20 +78,27 @@ const output = new RuntimeOutputBuffer(
 self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
   const message = event.data;
 
-  if (message.version !== RUNTIME_PROTOCOL_VERSION) {
-    postError(`未対応のプロトコルバージョンです: ${String(message.version)}`);
+  if (!isMainToWorkerMessage(message)) {
+    postError("Invalid runtime message or protocol version.");
     return;
   }
 
   switch (message.type) {
     case "start":
-      void startRuntime(message.deviceInputs, message.debuggerChannel, message.connectionGraph);
+      void startRuntime(message.deviceInputs, message.debuggerChannel, message.connectionGraph, message.project, message.filesystemGate);
       break;
     case "input":
-      processInput(message.data);
+      if (scriptExecuting || queuedInputCharacters + message.data.length > MAX_SCRIPT_CHARACTERS) { postError("Runtime input queue is busy or full."); break; }
+      queuedInputCharacters += message.data.length;
+      inputQueue = inputQueue.then(() => processInput(message.data, message.requestId)).finally(() => { queuedInputCharacters -= message.data.length; });
       break;
     case "execute":
-      processScript(message.requestId, message.source, message.mode);
+      if (scriptExecuting || queuedInputCharacters) { postExecutionResult(message.requestId, false, "Runtime is busy."); break; }
+      void processScript(message.requestId, message.source, message.mode, message.path);
+      break;
+    case "project-sync":
+      if (scriptExecuting || queuedInputCharacters) { postError("Cannot synchronize files while Python is executing."); break; }
+      try { projectFilesystem?.synchronize(message.project); } catch (error) { postError(formatError(error)); }
       break;
     default:
       postError("未対応のWorkerメッセージです。");
@@ -94,6 +109,8 @@ async function startRuntime(
   deviceInputs?: SharedDeviceInputTransfer,
   debuggerChannelTransfer?: DebuggerChannelTransfer,
   requestedConnectionGraph?: ConnectionGraphV1,
+  project: ProjectSnapshot = { version: 1, entries: [] },
+  filesystemGate?: SharedArrayBuffer,
 ): Promise<void> {
   if (micropython !== null || starting) {
     postError("MicroPythonランタイムは既に起動しています。");
@@ -307,6 +324,9 @@ async function startRuntime(
     );
     installMachineBufferAdapters(micropython);
     installDebugger(micropython);
+    projectFilesystem = new RuntimeProjectFilesystem(micropython.FS, project, filesystemGate,
+      (snapshot, revision, checkpoint) => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "filesystem", project: snapshot, revision, checkpoint }));
+    micropython.runPython("__import__('sys').path[:] = ['/project', '/project/lib']");
 
     const sys = micropython.pyimport<{ version: unknown }>("sys");
     const version = String(sys.version);
@@ -339,28 +359,33 @@ async function startRuntime(
   }
 }
 
-function processInput(data: string): void {
+async function processInput(data: string, requestId: string): Promise<void> {
+  if (replResetRequested) return;
   if (micropython === null) {
     postError("MicroPythonランタイムはまだ起動していません。");
     return;
   }
 
   output.beginOperation();
+  projectFilesystem?.beginOperation();
   try {
-    processReplInput(
+    await processReplInputAsync(
       micropython,
       data,
-      () => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-reset" }),
-      () => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-executing" }),
+      () => { replResetRequested = true; projectFilesystem?.flush(true); postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-reset" }); },
+      () => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-executing", requestId }),
     );
   } catch (error) {
     try {
-      recoverReplFromBridgeError(micropython, error, (data) => postOutput("stderr", data));
+      postOutput("stderr", `\r\n${formatReplBridgeError(error)}\r\n`);
+      await micropython.replProcessCharWithAsyncify(3);
     } catch (recoveryError) {
       postError(`REPL recovery failed: ${formatError(recoveryError)}`);
     }
   } finally {
+    projectFilesystem?.flush(true);
     output.flush();
+    if (!replResetRequested) postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-ready", requestId });
   }
 }
 
@@ -378,11 +403,12 @@ const DISCONNECTED_UART_PEER: UartPeerPort = Object.freeze({
   },
 });
 
-function processScript(
+async function processScript(
   requestId: string,
   source: string,
   mode: "run" | "debug",
-): void {
+  path?: string,
+): Promise<void> {
   if (micropython === null) {
     postError("MicroPythonランタイムはまだ起動していません。");
     return;
@@ -398,21 +424,28 @@ function processScript(
   }
 
   output.beginOperation();
+  projectFilesystem?.beginOperation();
+  scriptExecuting = true;
   try {
     if (mode === "debug") {
       if (debuggerChannel === null) {
         throw new Error("デバッグ実行にはクロスオリジン分離が必要です。");
       }
       activeDebuggerRequestId = requestId;
-      const pdb = micropython.pyimport<{ _run(source: string): unknown }>("pdb");
-      pdb._run(source);
+      await micropython.runPythonAwaitable(`__import__('pdb')._run(${JSON.stringify(source)}, ${JSON.stringify(path === undefined ? "main.py" : "/project/" + path)})`);
     } else {
-      micropython.runPython(source);
+      if (path === undefined) await micropython.runPythonAwaitable(source);
+      else {
+        await micropython.runPythonAwaitable(`__file__ = ${JSON.stringify("/project/" + path)}\nexec(compile(${JSON.stringify(source)}, __file__, 'exec'))`);
+      }
     }
+    projectFilesystem?.flush(true);
     postExecutionResult(requestId, true);
   } catch (error) {
+    projectFilesystem?.flush(true);
     postExecutionResult(requestId, false, formatError(error));
   } finally {
+    scriptExecuting = false;
     activeDebuggerRequestId = null;
   }
 }

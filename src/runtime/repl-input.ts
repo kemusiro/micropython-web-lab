@@ -30,3 +30,17 @@ export function terminateReplInput(input: string): string {
 
   return `${withoutTrailingNewlines}${terminator}`;
 }
+
+/** Serialize characters across GC's Asyncify suspension points. */
+export async function processReplInputAsync(
+  runtime: Pick<MicroPythonInstance, "replProcessCharWithAsyncify">,
+  data: string,
+  onReset: () => void,
+  onExecute: () => void,
+): Promise<void> {
+  const normalized = data.replaceAll("\r\n", "\n").replaceAll("\r", "\n").replaceAll("\n", "\r");
+  for (const byte of new TextEncoder().encode(normalized)) {
+    if (byte === 13 || byte === 4) onExecute();
+    if (await runtime.replProcessCharWithAsyncify(byte) !== 0) { onReset(); return; }
+  }
+}
