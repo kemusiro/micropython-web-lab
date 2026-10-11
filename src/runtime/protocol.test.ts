@@ -14,6 +14,21 @@ it("validates filesystem payloads in both directions and named execution paths",
 });
 
 describe("isWorkerToMainMessage", () => {
+  it("accepts sorted breakpoint snapshots and rejects malformed line numbers", () => {
+    const snapshot = {
+      version: RUNTIME_PROTOCOL_VERSION,
+      type: "debugger-breakpoints",
+      requestId: "execution-1",
+    };
+    for (const lines of [[], [1, 3, 50]]) {
+      expect(isWorkerToMainMessage({ ...snapshot, lines })).toBe(true);
+    }
+    for (const lines of [undefined, [0], [-1], [1.5], ["2"], [NaN], [200_002], [1, 1], [2, 1]]) {
+      expect(isWorkerToMainMessage({ ...snapshot, lines })).toBe(false);
+    }
+    expect(isWorkerToMainMessage({ ...snapshot, requestId: "", lines: [] })).toBe(false);
+    expect(isWorkerToMainMessage({ ...snapshot, version: RUNTIME_PROTOCOL_VERSION - 1, lines: [] })).toBe(false);
+  });
   it("accepts valid runtime messages", () => {
     for (const type of ["repl-reset", "repl-executing", "output-limit"]) {
       expect(isWorkerToMainMessage({ version: RUNTIME_PROTOCOL_VERSION, type, requestId: "input-1" })).toBe(true);

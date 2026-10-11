@@ -345,6 +345,10 @@ button.quiet { background: transparent; }
 }
 
 .editor-code-area {
+  --editor-font-size: 0.9rem;
+  --editor-gutter-width: 6ch;
+  display: grid;
+  grid-template-columns: var(--editor-gutter-width) minmax(0, 1fr);
   position: relative;
   min-height: 13rem;
   overflow: hidden;
@@ -359,6 +363,8 @@ button.quiet { background: transparent; }
 }
 
 .editor-panel textarea {
+  grid-column: 2;
+  min-width: 0;
   position: relative;
   z-index: 1;
   width: 100%;
@@ -368,13 +374,78 @@ button.quiet { background: transparent; }
   border: 0;
   border-radius: 0.65rem;
   padding: 0.9rem;
-  color: #f0f4f1;
+  color: transparent;
+  caret-color: #f0f4f1;
   background: transparent;
-  font: 0.9rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font: var(--editor-font-size)/1.375rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   tab-size: 4;
 }
 
 .editor-code-area textarea:focus-visible { outline: none; }
+
+.editor-highlight-viewport {
+  position: absolute;
+  inset: 0 0 0 var(--editor-gutter-width);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#editor-highlighted-code, .editor-gutter {
+  margin: 0;
+  font: var(--editor-font-size)/1.375rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  tab-size: 4;
+}
+
+#editor-highlighted-code {
+  width: max-content;
+  min-width: 100%;
+  padding: 0.9rem;
+  color: #f0f4f1;
+  white-space: pre;
+}
+
+.python-keyword { color: #d7a4f3; }
+.python-string { color: #e3c47c; }
+.python-comment { color: #8ca995; }
+
+.editor-gutter {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 3;
+  width: var(--editor-gutter-width);
+  overflow: hidden;
+  border-right: 1px solid #34443b;
+  color: #98aaa0;
+  background: #17211b;
+  user-select: none;
+}
+
+#editor-line-numbers { padding-top: 0.9rem; }
+.editor-line-number {
+  display: grid;
+  grid-template-columns: 1ch 1ch minmax(0, 1fr);
+  gap: 0.25ch;
+  padding: 0 0.5ch;
+  text-align: right;
+}
+.editor-breakpoint-marker { color: #ff8585; visibility: hidden; }
+.editor-execution-marker { color: #f0bf55; visibility: hidden; }
+.editor-line-number[data-breakpoint="true"] .editor-breakpoint-marker { visibility: visible; }
+.editor-line-number[data-current="true"] .editor-execution-marker { visibility: visible; }
+.editor-line-number[data-current="true"] { color: #f0bf55; background: #3c3520; }
+
+.editor-cursor-line {
+  position: absolute;
+  inset: 0 0 auto var(--editor-gutter-width);
+  background: rgb(155 196 173 / 10%);
+  pointer-events: none;
+}
+.editor-cursor-line[hidden] { display: none; }
+
+@media (forced-colors: active) {
+  .editor-panel textarea { color: CanvasText; }
+  .editor-highlight-viewport { display: none; }
+}
 
 .debug-current-line {
   position: absolute;
@@ -1627,6 +1698,7 @@ body[data-app-screen="experiment"] #run-script-button:hover:not(:disabled) { bac
     grid-template-rows: auto auto auto auto;
   }
   body[data-app-screen="experiment"] #code-editor { height: 20rem; font-size: 0.8rem; }
+  body[data-app-screen="experiment"] .editor-code-area { --editor-font-size: 0.8rem; }
   .experiment-preview { flex-direction: row; flex-wrap: wrap; padding: 0.75rem 1rem; gap: 0.5rem; }
   .experiment-led { width: 1.5rem; height: 1.5rem; }
   .experiment-preview h3 { margin: 0; }

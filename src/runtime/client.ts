@@ -180,6 +180,14 @@ export class RuntimeClient {
         }
         this.#pauseOperationTimer();
         this.#setStatus("debugging");
+      } else if (event.data.type === "debugger-breakpoints") {
+        if (
+          event.data.requestId !== this.#activeExecutionId ||
+          this.#status !== "debugging"
+        ) {
+          this.#reportClientError("ブレークポイント通知が現在のデバッグ停止と一致しません。");
+          return;
+        }
       } else if (event.data.type === "debugger-resumed") {
         if (
           event.data.requestId !== this.#activeExecutionId ||

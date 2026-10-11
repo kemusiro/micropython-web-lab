@@ -476,6 +476,21 @@ function installDebugger(runtime: MicroPythonInstance): void {
         }
       });
     },
+    breakpoints_changed(linesJson: unknown): void {
+      if (activeDebuggerRequestId === null || typeof linesJson !== "string") {
+        throw new Error("No valid debugger breakpoint update is active.");
+      }
+      const candidate = {
+        version: RUNTIME_PROTOCOL_VERSION,
+        type: "debugger-breakpoints" as const,
+        requestId: activeDebuggerRequestId,
+        lines: JSON.parse(linesJson) as unknown,
+      };
+      if (!isWorkerToMainMessage(candidate)) {
+        throw new TypeError("Debugger breakpoints have an invalid format.");
+      }
+      postMessageToMain(candidate);
+    },
     resumed(): void {
       if (activeDebuggerRequestId === null) {
         throw new Error("No debugger execution is active.");

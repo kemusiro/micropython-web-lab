@@ -177,11 +177,13 @@ class Pdb:
             print("*** 行番号がソース範囲外です")
             return
         self._breakpoints.add(line_number)
+        self._notify_breakpoints()
         print("Breakpoint at main.py:%d" % line_number)
 
     def _clear_command(self, argument):
         if not argument:
             self._breakpoints.clear()
+            self._notify_breakpoints()
             print("Deleted all breakpoints")
             return
         try:
@@ -190,7 +192,11 @@ class Pdb:
             print("*** clearには行番号を指定してください")
             return
         self._breakpoints.discard(line_number)
+        self._notify_breakpoints()
         print("Deleted breakpoint at main.py:%d" % line_number)
+
+    def _notify_breakpoints(self):
+        _pdb_bridge.breakpoints_changed(_pdb_json.dumps(sorted(self._breakpoints)))
 
     def _evaluate(self, expression, frame):
         if not expression:

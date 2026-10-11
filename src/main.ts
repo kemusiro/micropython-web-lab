@@ -33,6 +33,7 @@ import { scenarioExampleSource } from "./examples/scenario-examples";
 import { FIRST_EXPERIMENT_SOURCE, FirstExperiment } from "./examples/first-experiment";
 import { loadAppScreen, saveAppScreen, type AppScreen } from "./layout/app-screen";
 import { changeEditorIndentation } from "./editor/indentation";
+import { CodeEditorView } from "./editor/code-editor-view";
 import { RuntimeClient } from "./runtime/client";
 import {
   applyDocumentTranslations,
@@ -100,6 +101,13 @@ const codeEditor = requiredElement<HTMLTextAreaElement>("code-editor");
 const editorTabsElement = requiredElement<HTMLDivElement>("editor-tabs");
 const editorDebugWorkspace = requiredElement<HTMLDivElement>("editor-debug-workspace");
 const debugCurrentLine = requiredElement<HTMLDivElement>("debug-current-line");
+const codeEditorView = new CodeEditorView(
+  codeEditor,
+  requiredElement("editor-code-area"),
+  requiredElement("editor-highlighted-code"),
+  requiredElement("editor-line-numbers"),
+  requiredElement("editor-cursor-line"),
+);
 const debugVariablePanel = requiredElement<HTMLElement>("debug-variable-panel");
 const debugVariableList = requiredElement<HTMLDivElement>("debug-variable-list");
 const debuggerLocation = requiredElement<HTMLSpanElement>("debugger-location");
@@ -1021,8 +1029,8 @@ function acceptRuntimeFiles(snapshot: ProjectSnapshot): void {
   if (!editorTabs.length) editorTabs = [{ id: "main", title: "main.py", source: "" }];
   if (!editorTabs.some(tab => tab.id === activeEditorTabId)) activeEditorTabId = editorTabs[0]!.id;
   before.replace(snapshot);
-  renderEditorTabs();
   codeEditor.value = activeEditorTab().source;
+  renderEditorTabs();
   filePanel.render();
   void persistProject().catch(projectError);
 }
@@ -1041,6 +1049,7 @@ function updateActiveEditorTabSource(source: string, edited = false): void {
 }
 
 function renderEditorTabs(): void {
+  codeEditorView.refresh();
   const locked = codeEditor.readOnly;
   const elements: HTMLElement[] = editorTabs.map((tab) => {
     const item = document.createElement("div");
@@ -1245,6 +1254,9 @@ function handleRuntimeMessage(message: WorkerToMainMessage): void {
     case "debugger-paused":
       renderDebuggerPause(message);
       break;
+    case "debugger-breakpoints":
+      codeEditorView.setBreakpoints(message.lines);
+      break;
     case "debugger-resumed":
       clearDebuggerWorkspace();
       break;
@@ -1362,6 +1374,7 @@ function renderDebuggerPause(
   message: Extract<WorkerToMainMessage, { type: "debugger-paused" }>,
 ): void {
   activeDebuggerLine = message.line;
+  codeEditorView.setCurrentLine(message.line);
   editorDebugWorkspace.dataset.debugging = "true";
   debugVariablePanel.hidden = false;
   debuggerLocation.textContent = t("debugger.location", {
@@ -1371,7 +1384,7 @@ function renderDebuggerPause(
   });
   renderDebuggerVariables(message.globals);
   window.requestAnimationFrame(() => {
-    revealDebuggerLine(message.line);
+    if (activeDebuggerLine === message.line) revealDebuggerLine(message.line);
   });
 }
 
@@ -1432,7 +1445,7 @@ function updateDebuggerLineMarker(): void {
   if (!Number.isFinite(lineHeight) || !Number.isFinite(paddingTop)) {
     return;
   }
-  const offset = 1 + paddingTop + (activeDebuggerLine - 1) * lineHeight - codeEditor.scrollTop;
+  const offset = paddingTop + (activeDebuggerLine - 1) * lineHeight - codeEditor.scrollTop;
   debugCurrentLine.style.height = `${lineHeight}px`;
   debugCurrentLine.style.transform = `translateY(${offset}px)`;
   debugCurrentLine.dataset.line = String(activeDebuggerLine);
@@ -1443,6 +1456,7 @@ function updateDebuggerLineMarker(): void {
 
 function clearDebuggerWorkspace(): void {
   activeDebuggerLine = null;
+  codeEditorView.setCurrentLine(null);
   delete editorDebugWorkspace.dataset.debugging;
   debugCurrentLine.hidden = true;
   delete debugCurrentLine.dataset.line;
@@ -1485,6 +1499,9 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   resetDraftButton.disabled = sourceLocked;
   if (status !== "debugging") {
     clearDebuggerWorkspace();
+  }
+  if (status !== "debugging" && status !== "executing") {
+    codeEditorView.setBreakpoints([]);
   }
   terminalDirectInput.disabled = status !== "ready" || filePanel.busy;
   terminalShell.dataset.ready = String(status === "ready" || status === "debugging");

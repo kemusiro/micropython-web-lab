@@ -17,7 +17,7 @@ import {
 } from "../device-api/types";
 import { validateProjectSnapshot, projectPath, type ProjectSnapshot } from "../project/filesystem";
 
-export const RUNTIME_PROTOCOL_VERSION = 14 as const;
+export const RUNTIME_PROTOCOL_VERSION = 15 as const;
 export const MAX_SCRIPT_CHARACTERS = 200_000;
 export const MAX_DEBUGGER_GLOBALS = 100;
 export const MAX_DEBUGGER_VARIABLE_NAME_CHARACTERS = 128;
@@ -105,6 +105,12 @@ export type WorkerToMainMessage =
     }
   | {
       version: typeof RUNTIME_PROTOCOL_VERSION;
+      type: "debugger-breakpoints";
+      requestId: string;
+      lines: readonly number[];
+    }
+  | {
+      version: typeof RUNTIME_PROTOCOL_VERSION;
       type: "debugger-resumed";
       requestId: string;
     }
@@ -166,6 +172,17 @@ export function isWorkerToMainMessage(value: unknown): value is WorkerToMainMess
       );
     case "debugger-resumed":
       return isNonEmptyString(value.requestId);
+    case "debugger-breakpoints":
+      return (
+        isNonEmptyString(value.requestId) &&
+        Array.isArray(value.lines) &&
+        value.lines.length <= MAX_SCRIPT_CHARACTERS + 1 &&
+        value.lines.every((line: unknown, index: number, lines: unknown[]) =>
+          typeof line === "number" && Number.isSafeInteger(line) &&
+          line > 0 && line <= MAX_SCRIPT_CHARACTERS + 1 &&
+          (index === 0 || line > (lines[index - 1] as number)),
+        )
+      );
     case "device-state":
       return isVirtualDeviceState(value.state);
     case "device-model-state":
