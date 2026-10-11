@@ -4,6 +4,30 @@ import { loadMicroPython } from "../vendor/micropython-build/micropython.mjs";
 import { WEB_LAB_PDB_SOURCE } from "./pdb-module";
 
 describe("Web Lab pdb module", () => {
+  it("reports actual breakpoint changes and stops at the selected line", async () => {
+    const commands = ["break 3", "break 99", "continue", "clear 3", "break 2", "clear", "continue"];
+    const breakpoints: unknown[] = [];
+    const lines: number[] = [];
+    const runtime = await loadMicroPython({
+      url: new URL("../vendor/micropython-build/micropython.wasm", import.meta.url).href,
+      stdout() {},
+    });
+    runtime.registerJsModule("_web_lab_debugger", {
+      read_command(_filename: unknown, line: unknown, _function: unknown, _globals: unknown, announce: unknown) {
+        if (announce) lines.push(Number(line));
+        return commands.shift() ?? "continue";
+      },
+      breakpoints_changed(json: unknown) { breakpoints.push(JSON.parse(String(json))); },
+      resumed() {},
+    });
+    runtime.runPython(WEB_LAB_PDB_SOURCE);
+    const pdb = runtime.pyimport<{ _run(source: string): unknown }>("pdb");
+    pdb._run("value = 1\nvalue += 1\nvalue += 2");
+    expect(lines).toEqual([1, 3]);
+    expect(breakpoints).toEqual([[3], [], [2], []]);
+    pdb._run("value = 1\nvalue += 1\nvalue += 2");
+    expect(lines).toEqual([1, 3, 1]);
+  });
   it("stops at the first line and accepts next and continue", async () => {
     const decoder = new TextDecoder();
     const output: string[] = [];

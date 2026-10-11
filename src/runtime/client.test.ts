@@ -375,6 +375,33 @@ describe("RuntimeClient", () => {
     }
   });
 
+  it("accepts breakpoint updates only for the current paused execution", () => {
+    const worker = new FakeWorker();
+    const onMessage = vi.fn();
+    const client = new RuntimeClient(
+      { onMessage, onStatus: vi.fn() }, () => worker,
+      { debuggerChannel: SharedDebuggerChannel.create()! },
+    );
+    client.start();
+    worker.emit(readyMessage);
+    client.executeScript("pass", "debug");
+    worker.emit({
+      version: RUNTIME_PROTOCOL_VERSION, type: "debugger-paused",
+      requestId: "execution-1", filename: "main.py", line: 1,
+      functionName: "<module>", globals: [],
+    });
+    const snapshot = {
+      version: RUNTIME_PROTOCOL_VERSION, type: "debugger-breakpoints" as const,
+      requestId: "execution-1", lines: [1],
+    };
+    worker.emit(snapshot);
+    expect(onMessage).toHaveBeenCalledWith(snapshot);
+    expect(client.status).toBe("debugging");
+    worker.emit({ ...snapshot, requestId: "old-execution" });
+    expect(client.status).toBe("error");
+    expect(onMessage).not.toHaveBeenCalledWith({ ...snapshot, requestId: "old-execution" });
+  });
+
   it("quits a paused debugger by replacing the worker", () => {
     const firstWorker = new FakeWorker();
     const secondWorker = new FakeWorker();

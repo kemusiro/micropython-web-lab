@@ -29,6 +29,8 @@ workspace visible with the existing error message.
 
 - A browser-based MicroPython REPL
 - A multi-tab code editor with normal and debug execution
+- Python keyword, string, and comment highlighting, line numbers, and a highlighted caret line
+- A yellow arrow for the paused debugger line and red dots for breakpoints
 - Stop, reset with Ctrl+D, Worker replacement, and runtime and output limits
 - Functional GPIO, ADC, PWM, I2C, SPI, and UART models for the Pico 2 W
 - Virtual-device wiring and sample code
@@ -74,7 +76,13 @@ the Worker. Stop and Restart remain available in the wiring view. Device cards u
 and two columns when the device pane is wide enough. Collapsing a card leaves its simulation running.
 The existing saved device order is preserved; card collapse and multiline input visibility are page-local.
 
+## Editor and debugger
+
+While paused, use `b 10` in the pdb command field to set a breakpoint on line 10, and `cl 10` to remove it.
+Use `cl` alone to clear every breakpoint. Breakpoints are reset when execution ends or the runtime restarts.
+
 ## Project files and ZIP
+
 
 **Project files** shows folders and files below `/project` as a tree. Click a folder to expand or
 collapse it; double-click a file or press Enter to open it. Use arrow keys to navigate and the left/right
