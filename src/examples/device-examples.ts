@@ -2,6 +2,8 @@ import { BME280_EXAMPLE_SOURCE } from "./bme280-example";
 import { GT_502MGG_EXAMPLE_SOURCE } from "./gt-502mgg-example";
 import { OSTAMC5A31A_VV_EXAMPLE_SOURCE } from "./ostamc5a31a-vv-example";
 import { SSD1331_EXAMPLE_SOURCE } from "./ssd1331-example";
+import { YM2203_EXAMPLE_SOURCE } from "./ym2203-example";
+import { YM_INSTANCE } from "../audio/ym2203-protocol";
 
 const BUILT_IN_LED_EXAMPLE = `from machine import Pin
 from time import sleep_ms
@@ -60,6 +62,7 @@ sleep_ms(500)
 print("PWM GP16 duty_u16: 32768")`;
 
 const DEVICE_EXAMPLE_SOURCES = new Map<string, string>([
+  [YM_INSTANCE, YM2203_EXAMPLE_SOURCE],
   ["built-in-led", BUILT_IN_LED_EXAMPLE],
   ["button-gp15", buttonExampleSource(15)],
   ["analog-gp26", ANALOG_EXAMPLE],

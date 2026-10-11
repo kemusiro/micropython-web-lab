@@ -3,6 +3,9 @@
 MicroPython Web Lab本体にはMIT Licenseを適用する。以下は、リポジトリへ同梱する生成物と、その生成に
 使用する主要な第三者ソフトウェアの出典およびライセンス情報である。
 
+静的配信物の`distribution-LICENSES.txt`には、この文書と本体・MicroPython・Emscripten・Vite・
+ymfm・Pocket Signalのライセンス本文をビルド時にまとめる。既存の個別ライセンスファイルも保持する。
+
 ## MicroPython
 
 - Project: MicroPython
@@ -67,3 +70,38 @@ AE-BME280、QT095B／SSD1331、GT-502MGG-N、OSTAMC5A31A-VVの名称は、互換
 このリポジトリは、各社の製品画像またはデータシートPDFを複製しておらず、外部の公開ページへリンクする。
 仮想デバイスのコードと画面表現は、このプロジェクトが作成した学習用の機能モデルであり、実製品の電気特性、
 タイミング、全機能を再現するものではない。
+
+## ymfm (YM2203 audio prototype)
+
+- Upstream: <https://github.com/aaronsgiles/ymfm>
+- Commit: `81aec25ccbb98f4873a255f7551ac4dadac59b4a`
+- License: BSD-3-Clause; Copyright (c) 2021, Aaron Giles.
+- Exact license: [`runtime/ymfm/LICENSE`](runtime/ymfm/LICENSE).
+- Distribution: generated `src/vendor/ymfm-build/ym2203.wasm`, compiled from unchanged upstream sources
+  and the project-owned `runtime/ymfm/wrapper.cpp` with Emscripten 6.0.6.
+- Source and artifact checksums: `runtime/ymfm/versions.env`, `runtime/ymfm/artifacts.sha256`.
+- Browser distribution includes the complete license at `ymfm-LICENSE.txt`, linked from the prototype page.
+- The original comparison and ensemble sequences are project-authored. The separately attributed
+  Pocket Signal excerpt below adds CC0 music data. No product artwork or sound recordings are included.
+
+YM2203 and Yamaha names identify the emulated chip. This is an independent prototype and does not
+imply endorsement or affiliation with Yamaha. See [`docs/devices/ym2203-prototype.md`](docs/devices/ym2203-prototype.md).
+
+## Pocket Signal (YM2203 music sample)
+
+- Work: **Pocket Signal / ポケット・シグナル**, RetroFM Pocket (Keitark).
+- Upstream: <https://github.com/Keitark/RetroFM-Pocket>.
+- Revision: `1a6f7e9ac0d8bd7ad0a52219a0700f981be9aebb`.
+- Music, instrument data and generated VGM: CC0-1.0, as stated in the upstream
+  [`demo/README.md`](https://github.com/Keitark/RetroFM-Pocket/blob/1a6f7e9ac0d8bd7ad0a52219a0700f981be9aebb/demo/README.md).
+- Generator source: MIT License, Copyright (c) 2026 Keitark. Exact text is preserved in
+  [`public/pocket-signal-LICENSE.txt`](public/pocket-signal-LICENSE.txt).
+- Distribution: adapted MicroPython sample `src/examples/pocket-signal.py`, embedded in the
+  application and copied into the user's editor with the complete MIT notice; test-only original
+  VGM fixture `fixtures/ym2203/pocket-signal.vgm` (not shipped in the browser build).
+- Changes: complete 64-step score; original FM instrument settings, FNUM values and note timing
+  retained; algorithm-order operators mapped to the existing patch API; VGM writes converted to
+  bounded I2C reservation packets with optional native repetition; module amplifier set to 20%; source metadata printed.
+- Original VGM SHA-256: `b71eb66b4b54771e92b23b2e300889c163dfbbc815a8e946af04e4ea10617142`.
+- No RetroFM Pocket firmware, other demos, recordings or new dependencies are bundled.
+  See [`docs/devices/pocket-signal.md`](docs/devices/pocket-signal.md) for provenance and verification.

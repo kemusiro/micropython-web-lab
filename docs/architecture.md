@@ -18,7 +18,7 @@ browser main thread
 ├─ project storage
 ├─ RuntimeClient
 │    ├─ versioned control messages
-│    ├─ execution and output limits
+│    ├─ output limit and optional execution watchdog
 │    └─ Worker lifecycle
 └─ bounded SharedArrayBuffer inputs
              │
@@ -40,7 +40,7 @@ MicroPythonは固定した公式リリースとEmscripten版から、制限付�
 到達する`js`、`jsffi`、JavaScript hookと、任意ネットワークに使えるモジュールは公開しない。Web Labが
 登録する`machine`とデバッガ用モジュールだけを明示的な橋として扱う。
 
-メインスレッドの`RuntimeClient`はWorkerを使い捨て可能な実行単位として管理する。停止、実行時間超過、
+メインスレッドの`RuntimeClient`はWorkerを使い捨て可能な実行単位として管理する。停止、任意設定した実行時間超過、
 出力量超過、予期しないWorkerエラーではWorkerを破棄して再生成する。エディタ内容や接続設定の正本を
 Worker内だけに置かないため、実行状態を失っても画面全体を再読み込みせず復旧できる。
 
@@ -53,7 +53,12 @@ Workerを再生成する。Python変数とWorker内の状態は失うが、エ�
 
 標準出力・標準エラーはWorker内で改行または4,096文字までまとめ、制御イベントの前と入力処理の終了時にも
 転送する。1入力メッセージまたは1スクリプトあたり合計100,000文字を超えると、`output-limit`を一度通知して
-以降の出力を破棄する。メインスレッドの実行時間・出力量制限も維持し、端末のDOM描画はフレームごとにまとめる。
+以降の出力を破棄する。メインスレッドの出力量制限も維持し、端末のDOM描画はフレームごとにまとめる。
+アルファ版はスクリプト・REPL・デバッグ実行の時間上限を既定で無効とする。
+`RuntimeClientOptions.executionLimitMs`の省略または`null`は無制限、正の整数はホストの時限監視を有効にする。
+監視を設定した場合は、従来どおりデバッガ待機・保存完了待ちを除いた経過時間を累積する。
+無限ループは手動停止までCPUを消費するが、Worker破棄と再起動は期限に依存しない。
+変更理由と影響は[ADR 0045](adr/0045-disable-the-default-execution-deadline-for-alpha.md)を参照する。
 詳細と通信版の移行は[ADR 0033](adr/0033-recover-repl-reset-and-output-floods.md)を参照する。
 
 ## 同期入力
@@ -173,3 +178,52 @@ REPLは出力画面モデルと不可視のブラウザ入力要素を分ける�
 - [ADR 0030: 小さな型付きカタログでUIを多言語化する](adr/0030-localize-the-ui-with-a-small-typed-catalog.md)
 - [ADR 0031: ビューポートへ追従するワークベンチを使う](adr/0031-use-a-viewport-responsive-workbench.md)
 - [ADR 0032: 停止位置と上限付きグローバル変数を表示する](adr/0032-show-debug-location-and-bounded-globals.md)
+
+## 実験的FM音声経路
+
+`fm-prototype.html`は既存RuntimeClientとI2C経路を使い、発音を独立したAudioWorkletへ委譲する。
+公開Device APIと管理版の既定接続は維持し、ホスト内部の版付き・上限付き音声命令だけを追加する。
+Runtime Protocol 15では`prototype-audio`を追加した。停止・復旧時にはWorkerに加えて音声出力を遮断する。
+設計と制約は[ADR 0049](adr/0049-prototype-i2c-fm-audio.md)を参照する。
+
+通常ワークスペースではカタログから音源を選択接続できる。既定配線は維持し、音声操作を
+`YmAudioPanel`がホスト側で所有する。接続変更・実行エラー・停止で予約と出力を遮断する。
+カタログと既定接続の分離、保存と旧版への影響は[ADR 0037](adr/0037-integrate-an-opt-in-sound-module.md)を参照する。
+
+通常の音源サンプルはプロジェクト内のPythonライブラリで音符と音色を既存I2C命令へ変換する。
+ライブラリは通常の保存・import経路を利用し、編集済みファイルを自動上書きしない。
+追加と移行の扱いは[ADR 0038](adr/0038-add-a-project-local-sound-driver.md)を参照する。
+
+合奏は追加ライブラリが最大6トラックのイベントを順序付けし、一つのI2C予約へまとめる。
+全トラックが同じAudioWorkletの時計を使い、既存のベースドライバーを変更しない。
+同時刻のレジスタ順と配布方法は[ADR 0039](adr/0039-reserve-a-multi-channel-score.md)を参照する。
+
+音色設定の追加ライブラリは合奏版を継承し、FMのOP1〜OP4を明示的な辞書からレジスタへ変換する。
+SSGの共有ノイズ／エンベロープ設定と、チャンネルごとのミキサー・即時発音も提供する。
+既存ライブラリは変更せず、三つの依存を競合・容量検査後にまとめて追加する。
+APIの範囲と配布方法は[ADR 0040](adr/0040-add-explicit-fm-patches-and-ssg-controls.md)を参照する。
+
+音色エディターはホスト側に設定案を持ち、試聴では固定形式のPythonを既存実行環境へ渡す。
+発音は従来のI2C経路を通り、コードやライブラリの正本を試聴のために書き換えない。
+書き出し時だけ、新しいPythonタブと必要なライブラリを通常の保存経路へ追加する。
+設計は[ADR 0041](adr/0041-add-a-host-owned-sound-patch-editor.md)を参照する。
+
+音声ホストとAudioWorkletの内部配送は停止世代・命令番号を持つ。受付応答と音声処理の進捗を分離し、
+旧世代や新しい命令より古いメーターが現在の表示を上書きしない。公開I2C・Runtime Protocolは変更しない。
+完了／停止の区別、予約中の即時writeの期限維持は[ADR 0042](adr/0042-confirm-audio-delivery-and-playback.md)を参照する。
+
+通常音源のAudioContextは結線へ連動し、解除時は破棄する。スピーカーは初期ミュートで、
+ミュート・音量・演奏状態を分離する。音色エディターは同じスピーカー状態を操作する。
+保存データとI2C契約を変更せず、[ADR 0043](adr/0043-couple-audio-to-connections-and-separate-speaker-mute.md)で旧有効化操作を置き換える。
+
+長時間演奏はI2Cの既存命令を維持して32ビット時刻・期間の命令を追加し、最大約49.7日とする。
+繰り返しではAudioWorkletが最大131,071イベントのパターンを再利用し、周ごとの時刻を絶対サンプル位置へ
+変換する。メモリ量とI2C送信量は演奏時間に比例して増えない。メーターは累積イベント数を示す。
+連続試聴は定期I2C更新を廃止し、設定変更時だけ送信する。
+既知の同梱旧版Pythonライブラリと完全一致するファイルだけ更新し、開いたタブも同期して
+Worker再生成でimportキャッシュを破棄する。編集済みファイル・未保存変更・shadowingは拒否する。
+保存形式、Device SDK、固定WASM、本番依存は変えない。[ADR 0046](adr/0046-support-long-native-ym2203-playback.md)を参照。
+
+大容量予約は[ADR 0048](adr/0048-enlarge-native-ym2203-reservations.md)で正式上限を131,071件へ拡張した。
+I2C追加時は新しいバッチと境界時刻だけを検証し、全予約の反復コピーを避ける。
+4バイトstatusは件数を65,535で飽和させ、6バイトstatusで正確な32ビット件数を提供する。

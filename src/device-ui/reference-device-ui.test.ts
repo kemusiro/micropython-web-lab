@@ -12,6 +12,7 @@ import { MANAGED_CONNECTION_GRAPH } from "../connections/managed-connection-grap
 describe("reference Device UI declarations", () => {
   it("declares every M11.2 reference device without executable presentation data", () => {
     expect(REFERENCE_DEVICE_UIS.map((entry) => entry.instanceId)).toEqual([
+      "ym2203-prototype",
       "built-in-led",
       "button-gp15",
       "analog-gp26",

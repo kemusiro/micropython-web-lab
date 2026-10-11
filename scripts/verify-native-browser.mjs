@@ -93,6 +93,12 @@ try {
     assert.equal(await js("return crossOriginIsolated && typeof SharedArrayBuffer === 'function'"), true);
     await repl('print("native-start", 6 * 7)'); await output("native-start 42");
   });
+  await check("nested Python calls and GC preserve live objects", async () => {
+    await run("def descend(depth, recurse):\n    if depth == 0:\n        import gc\n        keep = bytearray(b'gc-root')\n        gc.collect()\n        return bytes(keep)\n    return recurse(depth - 1, recurse)\nprint('native-nested-gc', descend(12, descend))");
+    await output("native-nested-gc b'gc-root'"); await ready();
+    await run('print("native-after-gc", 6 * 7)');
+    await output("native-after-gc 42"); await ready();
+  });
   await check("short viewport minimum working heights", async () => {
     await call("/window/rect", { width: 1280, height: 680 });
     await until(`(() => {
@@ -179,6 +185,34 @@ try {
     await run('raise ValueError("native-error-marker")'); await output("ValueError: native-error-marker"); await ready();
     await repl("from machine import Pin; Pin(25, Pin.OUT)"); await output("Unsupported Pico 2 W GPIO pin: 25");
     await repl('print("error-recovered", 42)'); await output("error-recovered 42");
+  });
+  const sound = '[data-device-instance="ym2203-prototype"]';
+  const scope = `${sound} [data-ym-scope]`;
+  const metric = name => `Number(document.querySelector(${JSON.stringify(scope)})?.dataset[${JSON.stringify(name)}])`;
+  await check("YM2203 muted connection, isolated FM and SSG reservations, stop and recovery", async () => {
+    await click("#open-device-configuration");
+    await click('[data-connection-device-toggle="ym2203-prototype"]');
+    await click(".connection-editor-actions button:last-child");
+    await click("#close-device-configuration");
+    await ready();
+    await until(`document.querySelector('${sound} [data-ym-mute]')?.getAttribute("aria-pressed") === "true"`, "initial mute");
+    await click(`${sound} [data-ym-mute]`);
+    await until(`document.querySelector('${sound} .ym-audio-panel')?.dataset.audioState === "ready"`, "audio ready");
+    await click(`${sound} [data-device-example]`);
+    const setup = 'from machine import I2C\nfrom web_lab_ym2203_v1 import YM2203\nsound = YM2203(I2C(0))\nsound.reset()\nsound.volume(30)\nsound.fm_tone()\n';
+    for (const source of ["fm", "ssg"]) {
+      await run(setup + `sound.reserve((60,), source='${source}', step_ms=1500, gate_ms=1200, tail_ms=300)\nprint('native-${source}')`);
+      await output(`native-${source}`); await ready();
+      const other = source === "fm" ? "ssg" : "fm";
+      await until(`${metric(`${source}Rms`)} > 0.001 && ${metric(`${other}Rms`)} < 0.000001 && ${metric("outputRms")} > 0.001`, `${source} isolated audio`);
+      await until(`document.querySelector(${JSON.stringify(scope)}).dataset.playbackState === "completed" && ${metric("applied")} === 4 && ${metric("outputRms")} < 0.000001`, `${source} completed`);
+    }
+    await run(setup + "sound.reserve((60,), step_ms=10000, gate_ms=9000, tail_ms=1000)");
+    await until(`${metric("outputRms")} > 0.001`, "sound before Stop");
+    await click("#stop-button");
+    await until(`${metric("outputRms")} < 0.000001`, "silent after Stop");
+    await click("#restart-button"); await ready();
+    assert.equal(await js(`return ${metric("outputRms")}`), 0);
   });
   await check("missing isolation shows disabled shared inputs", async () => {
     fixture.setFault("isolation"); await navigate(); await ready();

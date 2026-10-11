@@ -1,0 +1,38 @@
+.ym-patch-dialog { width: min(1040px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); padding: 0; border: 1px solid #669b7b; border-radius: 1rem; color: #d4e8dc; background: linear-gradient(140deg, #203b2c, #111a15 65%); }
+.ym-patch-dialog[open] { display: flex; flex-direction: column; }
+.ym-patch-dialog::backdrop { background: #061a18b8; backdrop-filter: blur(3px); }
+.ym-patch-dialog header, .ym-patch-dialog footer { padding: 1rem 1.25rem; flex: none; }
+.ym-patch-dialog header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #456b59; }
+.ym-patch-dialog h2 { margin: 0.25rem 0 0; font-size: 1.3rem; }
+.ym-patch-dialog small { color: #9bbaa7; }
+.ym-patch-dialog header small { letter-spacing: 0.15em; }
+.ym-patch-content { padding: 0 1.25rem 1rem; overflow: auto; min-height: 0; }
+.ym-patch-dialog p { font-size: 0.8rem; color: #b5c8be; line-height: 1.6; }
+.ym-patch-common { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0; }
+.ym-patch-dialog label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+.ym-patch-dialog input, .ym-patch-dialog select { color: #e2f6e9; background: #071c18; border: 1px solid #456b59; border-radius: 0.4rem; padding: 0.4rem; }
+.ym-patch-dialog input[type=number] { width: 5rem; }
+.ym-patch-dialog input[type=checkbox] { accent-color: #85d2a4; }
+.ym-patch-visual { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.ym-patch-visual.ym-patch-ssg { grid-template-columns: 1fr; }
+.ym-patch-visual svg { width: 100%; height: 185px; border-radius: 0.75rem; background: #071c18; }
+.ym-patch-visual svg[hidden] { display: none; }
+.ym-patch-monitor { background: #071c18; padding: 0.75rem; border-radius: 0.75rem; }
+.ym-patch-monitor span { float: right; color: #8bf2bf; font: 0.7rem ui-monospace, monospace; }
+.ym-patch-monitor canvas { display: block; width: 100%; height: 100px; margin-top: 0.5rem; }
+.ym-patch-monitor p { margin-bottom: 0; }
+.ym-patch-operators { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+.ym-patch-operators fieldset { border: 1px solid #456b59; border-radius: 0.75rem; margin: 0; padding: 0.75rem; min-width: 0; }
+.ym-patch-operators legend { color: #8bf2bf; padding: 0 0.4rem; }
+.ym-patch-operators label { justify-content: space-between; margin: 0.35rem 0; font-family: ui-monospace, monospace; }
+.ym-patch-dialog footer { border-top: 1px solid #456b59; }
+.ym-patch-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.ym-patch-dialog button { padding: 0.5rem 0.75rem; font-size: 0.8rem; }
+.ym-patch-dialog [data-ym-patch-preview], .ym-patch-dialog [data-ym-patch-export] { background: #245d42; border-color: #8bf2bf; }
+.ym-patch-dialog textarea { width: 100%; height: 12rem; margin-top: 0.5rem; font: 0.75rem ui-monospace, monospace; color: #d4e8dc; background: #071c18; }
+.ym-patch-dialog summary { cursor: pointer; font-size: 0.8rem; margin-top: 1rem; }
+@media (max-width: 850px) { .ym-patch-operators { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 550px) { .ym-patch-dialog header, .ym-patch-dialog footer { padding: 0.75rem; } .ym-patch-content { padding: 0 0.75rem 0.75rem; } .ym-patch-visual { grid-template-columns: 1fr; } .ym-patch-dialog h2 { font-size: 1.1rem; } .ym-patch-common { gap: 0.6rem; } .ym-patch-operators { grid-template-columns: 1fr; } }
+.ym-patch-dialog [data-ym-patch-mute][aria-pressed="true"] { background: #245d42; border-color: #8bf2bf; }
+.ym-patch-dialog .ym-patch-mode { flex-wrap: wrap; }
+.ym-patch-mode select { max-width: 100%; min-width: 0; }

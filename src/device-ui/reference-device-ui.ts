@@ -8,6 +8,18 @@ export interface ReferenceDeviceUi {
 }
 
 export const REFERENCE_DEVICE_UIS: readonly ReferenceDeviceUi[] = Object.freeze([
+  define("ym2203-prototype", {
+    version: 1,
+    title: "YM2203音源（実験用）",
+    description: "I2C0 / 0x44。FMだけ→SSGだけで「ドレミファソファミレド」を比較できます。",
+    components: [
+      { id: "address", kind: "state-text", label: "アドレス", stateKey: "address", format: "hex" },
+      { id: "gain", kind: "state-text", label: "内蔵アンプ (%)", stateKey: "gain", format: "integer" },
+      { id: "plays", kind: "state-text", label: "予約演奏回数", stateKey: "plays", format: "integer" },
+      { id: "queued", kind: "state-text", label: "登録イベント", stateKey: "queuedEvents", format: "integer" },
+      { id: "transactions", kind: "state-text", label: "トランザクション数", stateKey: "transactions", format: "integer" },
+    ],
+  }),
   define("built-in-led", {
     version: 1,
     title: "内蔵LED",
@@ -395,6 +407,10 @@ export const REFERENCE_DEVICE_UIS: readonly ReferenceDeviceUi[] = Object.freeze(
 ]);
 
 const ENGLISH_REFERENCE_TEXT: Readonly<Record<string, string>> = {
+  "YM2203音源（実験用）": "YM2203 sound module (experimental)",
+  "I2C0 / 0x44。FMだけ→SSGだけで「ドレミファソファミレド」を比較できます。":
+    "I2C0 / 0x44. Compare C–D–E–F–G–F–E–D–C using FM alone, then SSG alone.",
+  "内蔵アンプ (%)": "Built-in amplifier (%)", "予約演奏回数": "Reserved performances", "登録イベント": "Queued events",
   "内蔵LED": "Built-in LED",
   "Pico 2 Wの内蔵LED出力を表示します。": "Shows the Pico 2 W built-in LED output.",
   "出力": "Output", "点灯": "On", "消灯": "Off",

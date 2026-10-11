@@ -1,3 +1,4 @@
+import { isYmCommand, type YmCommand } from "../audio/ym2203-protocol";
 import {
   MAX_VIRTUAL_ADC_VALUE,
   type VirtualDeviceState,
@@ -64,6 +65,7 @@ export type MainToWorkerMessage =
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "project-sync"; project: ProjectSnapshot };
 
 export type WorkerToMainMessage =
+  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "prototype-audio"; command: YmCommand }
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "repl-executing" | "repl-ready"; requestId: string }
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "filesystem"; project: ProjectSnapshot; revision: number; checkpoint: boolean }
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "repl-reset" | "output-limit" }
@@ -131,6 +133,7 @@ export function isWorkerToMainMessage(value: unknown): value is WorkerToMainMess
   }
 
   switch (value.type) {
+    case "prototype-audio": return isYmCommand(value.command);
     case "filesystem":
       try { validateProjectSnapshot(value.project); } catch { return false; }
       return typeof value.revision === "number" && Number.isSafeInteger(value.revision) && value.revision > 0 && typeof value.checkpoint === "boolean";

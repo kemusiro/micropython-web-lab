@@ -16,6 +16,9 @@ import {
   mergeConnectionGraphs,
 } from "../connections/connection-presets";
 import { DeviceHost } from "../device-api/device-host";
+import { createYm2203PrototypeDefinition } from "../devices/ym2203-prototype";
+import { YM_INSTANCE, type YmCommand } from "../audio/ym2203-protocol";
+import { YmCommandBudget } from "../audio/ym2203-budget";
 import type { UartPeerPort } from "../device-api/types";
 import { createMachineModule } from "../simulation/machine-module";
 import {
@@ -149,6 +152,15 @@ async function startRuntime(
       throw new Error("ブラウザ保存の配線とローカルDevice構成は同時に使用できません。");
     }
     const definitions = new Map(preset.definitions);
+    if (requestedConnectionGraph?.devices.some(device => device.instanceId === YM_INSTANCE)) {
+      // Bounded host-only sink. Device SDK and user Python never receive a port or AudioContext.
+      const audioBudget = new YmCommandBudget();
+      const sendAudio = (command: YmCommand): void => {
+        audioBudget.consume(command);
+        postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "prototype-audio", command });
+      };
+      definitions.set(YM_INSTANCE, createYm2203PrototypeDefinition(sendAudio));
+    }
     for (const localDevice of localDeviceBundle?.devices ?? []) {
       if (definitions.has(localDevice.instanceId)) {
         throw new Error(`Device instance ${localDevice.instanceId} already exists in the base preset.`);

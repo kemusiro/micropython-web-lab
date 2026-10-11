@@ -44,3 +44,12 @@ ADR 0035でMEMFSを容量制限付きの`/project`領域として利用する。
 上流の`replProcessCharWithAsyncify()`を使用し、GC中も入力を直列処理する。
 更新時は両パッチを再適用し、`test:runtime`の反復割り当て・GC検証も実行する。
 `micropython.d.mts`はこのリポジトリで管理するAPI宣言であり、WASMビルドの生成対象ではない。
+
+ADR 0048で、ドライバーメソッド内のGCに必要なAsyncify退避領域を固定64 KiBへ拡張した。
+正本は`runtime/micropython/variant/mpconfigvariant.mk`。Pythonヒープの1 MiB上限は維持する。
+同期JSバッファ境界内でGCを起動する経路はまだ扱えないため、大容量I2C転送側で先行GCを行う。
+
+リンク時にも`-Os`を指定し、Asyncifyを含むWASMを最適化する。Cコンパイル時だけの`-Os`では、
+Safari 27.0.1で通常の音源ドライバー呼び出しと12段のPython関数呼び出しが
+`RangeError: Maximum call stack size exceeded`になることを確認した。
+ヒープ・Asyncify領域の上限、許可するAPIとMicroPythonの固定版は変更しない。

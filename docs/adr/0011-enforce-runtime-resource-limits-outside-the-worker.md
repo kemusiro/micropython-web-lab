@@ -2,6 +2,7 @@
 
 - 状態: Accepted
 - 日付: 2026-08-28
+- 時間制限の既定値は[ADR 0045](0045-disable-the-default-execution-deadline-for-alpha.md)でアルファ版向けに更新。出力量制限は維持。以下は当時の決定。
 
 ## 背景
 

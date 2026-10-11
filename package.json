@@ -14,7 +14,7 @@
     "build": "pnpm build:sdk && tsc --noEmit && vite build && node scripts/verify-managed-build.mjs",
     "test:headers": "node scripts/verify-security-headers.mjs",
     "test:runtime": "node scripts/verify-micropython-runtime.mjs",
-    "test:notices": "node scripts/verify-third-party-notices.mjs",
+    "test:notices": "node scripts/verify-third-party-notices.mjs && node scripts/verify-ymfm.mjs",
     "test": "pnpm build:sdk && vitest run src packages/device-api/src packages/device-testkit/src templates/device",
     "test:e2e": "playwright test",
     "test:e2e:local-device": "playwright test --config playwright.local-device.config.ts",
@@ -27,7 +27,7 @@
     "check": "pnpm test:deployment && pnpm test:headers && pnpm test:runtime && pnpm test:notices && pnpm test && pnpm build && pnpm verify:device-template && pnpm verify:local-devices && pnpm verify:local-device-errors && pnpm test:e2e && pnpm test:e2e:local-device && pnpm test:e2e:local-devices && pnpm build:sakura",
     "build:sakura": "pnpm build:sdk && tsc --noEmit && vite build --base=./ && node scripts/verify-managed-build.mjs && node scripts/prepare-sakura.mjs",
     "verify:deployment": "node scripts/verify-deployment.mjs",
-    "test:deployment": "node --test scripts/sakura-deployment.test.mjs"
+    "test:deployment": "node --test scripts/sakura-deployment.test.mjs scripts/managed-build.test.mjs"
   },
   "dependencies": {},
   "devDependencies": {

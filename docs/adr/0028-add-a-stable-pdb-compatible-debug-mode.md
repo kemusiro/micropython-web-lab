@@ -2,6 +2,7 @@
 
 - 状態: Accepted
 - 日付: 2026-10-01
+- 実行時間監視は[ADR 0045](0045-disable-the-default-execution-deadline-for-alpha.md)で任意設定化。以下の時間累積は監視を設定した場合に適用する。
 
 ## 背景
 

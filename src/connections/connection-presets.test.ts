@@ -6,9 +6,21 @@ import {
   createConnectionPreset,
   mergeConnectionGraphs,
 } from "./connection-presets";
-import { validateConnectionGraph } from "./connection-model";
+import { resolveConnectionGraph, validateConnectionGraph } from "./connection-model";
+import { MANAGED_DEVICE_CATALOG_GRAPH } from "./managed-connection-graph";
+import { createYm2203PrototypeDefinition } from "../devices/ym2203-prototype";
+import { RASPBERRY_PI_PICO_2_W_BOARD_PROFILE } from "../board/raspberry-pi-pico-2-w";
 
 describe("connection presets", () => {
+  it("resolves the opt-in sound module catalog while leaving default connections unchanged", () => {
+    const preset = createConnectionPreset(MANAGED_PICO_2_W_PRESET_ID);
+    const definitions = new Map(preset.definitions);
+    definitions.set("ym2203-prototype", createYm2203PrototypeDefinition(() => {}));
+    const resolved = resolveConnectionGraph(MANAGED_DEVICE_CATALOG_GRAPH, RASPBERRY_PI_PICO_2_W_BOARD_PROFILE, definitions);
+    const sound = resolved.ports.find(port => port.instanceId === "ym2203-prototype");
+    expect(sound?.endpoint).toMatchObject({ kind: "i2c", address: 0x44 });
+    expect(preset.graph.devices.some(device => device.instanceId === "ym2203-prototype")).toBe(false);
+  });
   it("provides stable managed and board-only preset contents", () => {
     const managed = createConnectionPreset(MANAGED_PICO_2_W_PRESET_ID);
     const boardOnly = createConnectionPreset(BOARD_ONLY_PICO_2_W_PRESET_ID);
