@@ -31,7 +31,7 @@ export class YmAudioPanel {
   };
   #deliveryState: YmDeliveryState = { epoch: 0, sent: 0, accepted: 0, rendered: 0 };
   onMeter: ((meter: AudioMeter) => void) | null = null;
-  constructor(readonly locale: SupportedLocale, readonly openScore?: () => void, readonly openTone?: () => void, readonly openEditor?: () => void, readonly openSong?: () => void) {
+  constructor(readonly locale: SupportedLocale, readonly openScore?: () => void, readonly openTone?: () => void, readonly openEditor?: () => void, readonly openSong?: () => void, readonly openMml?: () => void, readonly openBin?: () => void) {
     this.#message = this.text("結線に合わせて音源を準備します。", "The connection controls the audio engine.");
     this.#audio = new YmAudio(meter => this.meter(meter), message => {
       if (!this.#audio.ready) this.stop();
@@ -88,6 +88,20 @@ export class YmAudioPanel {
     mute.textContent = this.text("ミュート", "Mute");
     mute.addEventListener("click", () => { void this.toggleMute(); });
     actions.append(mute);
+    const samples = document.createElement("div"); samples.className = "ym-audio-actions";
+    for (const [kind, ja, en, callback] of [
+      ["mml", "簡易MML", "Simple MML", this.openMml],
+      ["bin", "BINプレイヤー", "BIN player", this.openBin],
+    ] as const) {
+      if (!callback) continue;
+      const button = document.createElement("button"); button.type = "button";
+      button.dataset[kind === "mml" ? "ymMmlExample" : "ymBinExample"] = "true";
+      button.dataset.deviceExample = YM_INSTANCE; button.textContent = this.text(ja, en);
+      button.addEventListener("click", callback); samples.append(button);
+    }
+    const more = document.createElement("section");
+    const summary = document.createElement("p"); summary.textContent = this.text("追加サンプル", "More samples"); more.append(summary);
+    const extra = document.createElement("div"); extra.className = "ym-audio-actions"; more.append(extra);
     if (this.openScore) {
       const score = document.createElement("button"); score.type = "button";
       score.dataset.ymScoreExample = "true";
@@ -95,7 +109,7 @@ export class YmAudioPanel {
       score.textContent = this.text("合奏サンプル", "Ensemble sample");
       score.setAttribute("aria-label", this.text("FM＋SSG合奏サンプルを新しいエディタタブで開く", "Open the FM + SSG ensemble sample in a new editor tab"));
       score.addEventListener("click", () => this.openScore?.());
-      actions.append(score);
+      extra.append(score);
     }
     if (this.openTone) {
       const tone = document.createElement("button"); tone.type = "button";
@@ -104,14 +118,14 @@ export class YmAudioPanel {
       tone.textContent = this.text("音色設定サンプル", "Patch sample");
       tone.setAttribute("aria-label", this.text("FM音色・SSGノイズとエンベロープのサンプルを新しいエディタタブで開く", "Open the FM patch and SSG noise/envelope sample in a new editor tab"));
       tone.addEventListener("click", () => this.openTone?.());
-      actions.append(tone);
+      extra.append(tone);
     }
     if (this.openSong) {
       const song = document.createElement("button"); song.type = "button";
-      song.textContent = this.text("楽曲サンプル", "Music sample");
+      song.textContent = this.text("Pocket Signal", "Pocket Signal");
       song.dataset.ymSongExample = "true"; song.dataset.deviceExample = YM_INSTANCE;
       song.setAttribute("aria-label", this.text("Pocket Signalの全曲を新しいエディタタブで開く", "Open the complete Pocket Signal in a new editor tab"));
-      song.addEventListener("click", () => this.openSong?.()); actions.append(song);
+      song.addEventListener("click", () => this.openSong?.()); extra.append(song);
     }
     if (this.openEditor) {
       const editor = document.createElement("button"); editor.type = "button";
@@ -129,7 +143,10 @@ export class YmAudioPanel {
     const status = document.createElement("p"); status.dataset.ymStatus = "true"; status.setAttribute("aria-live", "polite");
     const playback = document.createElement("p"); playback.dataset.ymPlayback = "true";
     const delivery = document.createElement("p"); delivery.dataset.ymDelivery = "true";
-    root.append(scope, meters, playback, delivery, actions, volumeLabel, speaker, status);
+    const guide = document.createElement("a"); guide.href = "https://asamomiji.jp/articles/micropython-web-lab-guide/#ym2203";
+    guide.target = "_blank"; guide.rel = "noopener";
+    guide.textContent = this.text("使い方ガイド", "Usage guide"); samples.append(guide);
+    root.append(scope, meters, playback, delivery, actions, samples, more, volumeLabel, speaker, status);
     // Keep the host audio controls within the card's collapsible body.
     const components = card.querySelector(".device-ui-components");
     if (components === null) throw new Error("Sound card components were not found");

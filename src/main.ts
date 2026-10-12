@@ -34,6 +34,7 @@ import {
 } from "./device-ui/reference-device-ui";
 import { deviceExampleSource, hasDeviceExample } from "./examples/device-examples";
 import { prepareYm2203Library, backupYm2203Library, YmLibraryConflict } from "./examples/ym2203-library";
+import { YM2203_MML_EXAMPLE_SOURCE, YM2203_BIN_EXAMPLE_SOURCE, type YmSampleKind } from "./examples/ym2203-samples";
 import { YM2203_SCORE_EXAMPLE_SOURCE, YM2203_TONE_EXAMPLE_SOURCE } from "./examples/ym2203-example";
 import { POCKET_SIGNAL_EXAMPLE_SOURCE } from "./examples/pocket-signal";
 import { scenarioExampleSource } from "./examples/scenario-examples";
@@ -268,7 +269,7 @@ const soundPatchEditor = new YmPatchEditor(uiLocale, {
   },
   readWave: wave => soundPanel.readWave(wave),
 });
-const soundPanel = new YmAudioPanel(uiLocale, () => openDeviceExample(YM_INSTANCE, "score"), () => openDeviceExample(YM_INSTANCE, "tone"), () => soundPatchEditor.open(), () => openDeviceExample(YM_INSTANCE, "pocket-signal"));
+const soundPanel = new YmAudioPanel(uiLocale, () => openDeviceExample(YM_INSTANCE, "score"), () => openDeviceExample(YM_INSTANCE, "tone"), () => soundPatchEditor.open(), () => openDeviceExample(YM_INSTANCE, "pocket-signal"), () => openDeviceExample(YM_INSTANCE, "mml"), () => openDeviceExample(YM_INSTANCE, "bin"));
 soundPanel.onMeter = meter => soundPatchEditor.meter(meter);
 const managedDeviceDefinitions = new Map(createManagedDeviceDefinitions());
 // Only manifests are used for validation on the UI thread. The Worker owns the live sink.
@@ -1261,8 +1262,8 @@ function installYmLibraries(snapshot: ProjectSnapshot, restart = false): void {
   renderEditorTabs(); filePanel.render();
 }
 
-function openDeviceExample(instanceId: string, kind: "comparison" | "score" | "tone" | "pocket-signal" = "comparison", recover = false): void {
-  const source = instanceId === YM_INSTANCE && kind !== "comparison" ? (kind === "pocket-signal" ? POCKET_SIGNAL_EXAMPLE_SOURCE : kind === "score" ? YM2203_SCORE_EXAMPLE_SOURCE : YM2203_TONE_EXAMPLE_SOURCE) : deviceExampleSource(instanceId, {
+function openDeviceExample(instanceId: string, kind: YmSampleKind = "comparison", recover = false): void {
+  const source = instanceId === YM_INSTANCE && kind !== "comparison" ? (kind === "mml" ? YM2203_MML_EXAMPLE_SOURCE : kind === "bin" ? YM2203_BIN_EXAMPLE_SOURCE : kind === "pocket-signal" ? POCKET_SIGNAL_EXAMPLE_SOURCE : kind === "score" ? YM2203_SCORE_EXAMPLE_SOURCE : YM2203_TONE_EXAMPLE_SOURCE) : deviceExampleSource(instanceId, {
     buttonPin: connectedGpioNumber(activeConnectionGraph, "button-gp15", "input", 15),
   });
   const entry = referenceDeviceUis.find((candidate) => candidate.instanceId === instanceId);
@@ -1278,9 +1279,10 @@ function openDeviceExample(instanceId: string, kind: "comparison" | "score" | "t
     if (recover && (runtime.status !== "ready" || filePanel.busy || replRuntimeBusy || !soundPanel.connected)) throw new Error(t("system.waitReady"));
     // Include the active draft when checking library collisions, before opening another tab.
     updateActiveEditorTabSource(codeEditor.value);
-    const recovery = recover ? backupYm2203Library(projectWorkspace.files, editorTabs, kind === "score", kind === "tone" || kind === "pocket-signal") : null;
-    const snapshot = recovery?.snapshot ?? prepareYm2203Library(projectWorkspace.files, editorTabs, kind === "score", kind === "tone" || kind === "pocket-signal");
-    const title = kind === "pocket-signal" ? "YM2203 Pocket Signal" : kind === "tone" ? (uiLocale === "ja" ? "YM2203 音色設定サンプル" : "YM2203 patch sample") : kind === "score" ? (uiLocale === "ja" ? "YM2203 合奏サンプル" : "YM2203 ensemble sample") : t("editor.sampleTitle", { device: entry.definition.title });
+    const player = kind === "mml" || kind === "bin" ? kind : undefined;
+    const recovery = recover ? backupYm2203Library(projectWorkspace.files, editorTabs, kind === "score", kind === "tone" || kind === "pocket-signal", player) : null;
+    const snapshot = recovery?.snapshot ?? prepareYm2203Library(projectWorkspace.files, editorTabs, kind === "score", kind === "tone" || kind === "pocket-signal", player);
+    const title = kind === "mml" ? "YM2203 MML" : kind === "bin" ? "YM2203 BIN" : kind === "pocket-signal" ? "YM2203 Pocket Signal" : kind === "tone" ? (uiLocale === "ja" ? "YM2203 音色設定サンプル" : "YM2203 patch sample") : kind === "score" ? (uiLocale === "ja" ? "YM2203 合奏サンプル" : "YM2203 ensemble sample") : t("editor.sampleTitle", { device: entry.definition.title });
     if (!openEditorTab(title, source)) return;
     if (recovery) editorTabs = [...recovery.tabs, activeEditorTab()];
     installYmLibraries(snapshot, recover);

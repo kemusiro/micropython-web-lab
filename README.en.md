@@ -252,6 +252,11 @@ The card distinguishes sent commands, worklet acceptance and audio processing, a
 Both `sound.volume(50)` in Python (range 0–100) and **Speaker volume** affect the output. A peak limiter bounds loud ensembles.
 Output is stronger than in the initial prototype; start with a lower setting after updating and adjust it to taste.
 
+The main samples are FM / SSG voices, Simple MML, and a streaming BIN player.
+Ensemble, patch controls and Pocket Signal remain as additional examples.
+See the [WYM1 binary format](docs/devices/ym2203-bin-format.md) and
+[conversion prompt](docs/devices/ym2203-conversion-prompt.md).
+
 Open `/fm-prototype.html`, enable audio, and run the sample to hear an I2C-controlled YM2203 module.
 The sample plays C–D–E–F–G–F–E–D–C using FM alone, then SSG alone, at the same pitch and tempo.
 Python can finish while playback continues. Stop, restart, mute, bounded scheduling, and failure recovery
