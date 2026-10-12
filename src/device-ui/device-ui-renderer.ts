@@ -234,7 +234,7 @@ export class DeviceUiRenderer {
       sample.type = "button";
       sample.className = "device-ui-example-button quiet";
       sample.dataset.deviceExample = entry.instanceId;
-      sample.textContent = t("device.openSample");
+      sample.textContent = t(entry.instanceId === "ym2203-prototype" ? "device.openSoundSample" : "device.openSample");
       sample.setAttribute(
         "aria-label",
         t("device.openSampleAria", { device: entry.definition.title }),

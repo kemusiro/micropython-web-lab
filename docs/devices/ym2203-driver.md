@@ -357,3 +357,53 @@ PC幅1360px・モバイル幅390pxでモード選択・状態表示・固定操�
 1回の予約と音源側ループなら、演奏中の追加Python実行・I2C送信は不要。
 累積送信予算はWorkerごとに1,024命令・425,981数値で、上限に達したら実行環境を再起動する。
 詳細は[ADR 0048](../adr/0048-enlarge-native-ym2203-reservations.md)。
+
+## 整理した同梱サンプル
+
+| 用途 | ボタン | 追加ライブラリ・データ |
+| --- | --- | --- |
+| FMとSSGの発声比較 | FM／SSG発声 | ベース。FMのみ→SSGのみのドレミファソファミレド |
+| 短い音楽を文字で記述 | 簡易MML | lib/web_lab_ym2203_mml_v1.py |
+| 大きなレジスタ列 | BINプレイヤー | lib/web_lab_ym2203_bin_v1.py、samples/ym2203-demo.bin |
+| APIの追加例 | 追加サンプル | 合奏、音色設定、許諾済みPocket Signal |
+
+サンプルは新しい未保存タブで開く。ライブラリとBINはプロジェクトへ追加する。
+Pythonを残すには「保存」でパスを指定する。編集済みライブラリ・同名BINの競合は更新を止める。
+「バックアップして更新」はym2203-backups/へ元データを退避してから更新する。
+
+### 簡易MML
+
+~~~python
+from machine import I2C, Pin
+from web_lab_ym2203_mml_v1 import YM2203
+sound = YM2203(I2C(0, scl=Pin(9), sda=Pin(8)))
+sound.reset()
+sound.fm_tone("soft")
+sound.reserve_mml((
+    {"source": "fm", "channel": 0, "mml": "t120 o4 l4 c d e f g f e d c2"},
+    {"source": "ssg", "channel": 0, "mml": "o3 l2 c f g c", "ssg_volume": 8},
+))
+~~~
+
+reserve_mml(tracks, tempo=120, tail_ms=300, repeat_ms=None)は総期間msを返す。
+全トラックは0 ms開始、sourceはfmまたはssg、channelは0〜2で重複不可。
+mmlは必須、source=fm、channel=0、ssg_volume=11が既定。FM音色は先に設定する。
+全MMLを検証し、キューが空の場合に予約する。
+
+| 記法 | 意味 |
+| --- | --- |
+| c d e f g a b | 音符。大小文字を区別しない |
+| r | 休符 |
+| c+, c#, b- | 半音上げ・下げ |
+| o4 | オクターブ0〜9。C4＝MIDI 60 |
+| >, < | オクターブを1上げる・下げる |
+| l4 | 既定の長さ。分母1〜64 |
+| c8, c4. | 個別の長さ・付点1個 |
+| t120 | 四分音符毎分32〜400。トラック内の変更可 |
+| q7 | 音符長の7/8を発音。1〜8 |
+
+既定o4・l4・q7。空白を許可。ループ記法・タイ・和音記法・音色番号・コメントは未対応。
+和音は別チャンネルへ分ける。未知の記法を黙って省略しない。
+各トラック8192文字・1024音符／休符、全体4096レジスタイベントまで。
+PMD/MUCOM等との互換性は示さない。大きな曲は[BINとWYM1仕様](ym2203-bin-format.md)を使う。
+[ChatGPTへの変換プロンプト例](ym2203-conversion-prompt.md)も参照する。

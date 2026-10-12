@@ -1,6 +1,9 @@
 import driverSource from "../drivers/web_lab_ym2203_v1.py?raw";
 import scoreSource from "../drivers/web_lab_ym2203_score_v1.py?raw";
 import toneSource from "../drivers/web_lab_ym2203_tone_v1.py?raw";
+import mmlSource from "../drivers/web_lab_ym2203_mml_v1.py?raw";
+import binSource from "../drivers/web_lab_ym2203_bin_v1.py?raw";
+import { ym2203DemoBin, YM2203_DEMO_BIN_PATH } from "./ym2203-samples";
 import previousDriver from "../drivers/pre-long-playback/web_lab_ym2203_v1.py?raw";
 import previousScore from "../drivers/pre-long-playback/web_lab_ym2203_score_v1.py?raw";
 import smallQueueDriver from "../drivers/pre-large-reservations/web_lab_ym2203_v1.py?raw";
@@ -15,10 +18,16 @@ export const YM2203_SCORE_PATH = "lib/web_lab_ym2203_score_v1.py";
 export const YM2203_TONE_SOURCE = toneSource;
 export const YM2203_TONE_PATH = "lib/web_lab_ym2203_tone_v1.py";
 
-function libraryPaths(score: boolean, tone: boolean): [string, string][] {
+export const YM2203_MML_SOURCE = mmlSource;
+export const YM2203_MML_PATH = "lib/web_lab_ym2203_mml_v1.py";
+export const YM2203_BIN_SOURCE = binSource;
+export const YM2203_BIN_PATH = "lib/web_lab_ym2203_bin_v1.py";
+
+function libraryPaths(score: boolean, tone: boolean, player?: "mml" | "bin"): [string, string][] {
   return [[YM2203_DRIVER_PATH, driverSource],
     ...(score || tone ? [[YM2203_SCORE_PATH, scoreSource]] as [string, string][] : []),
-    ...(tone ? [[YM2203_TONE_PATH, toneSource]] as [string, string][] : [])];
+    ...(tone ? [[YM2203_TONE_PATH, toneSource]] as [string, string][] : []),
+    ...(player ? [[player === "mml" ? YM2203_MML_PATH : YM2203_BIN_PATH, player === "mml" ? mmlSource : binSource]] as [string, string][] : [])];
 }
 
 export class YmLibraryConflict extends Error {
@@ -28,9 +37,9 @@ export class YmLibraryConflict extends Error {
 }
 
 /** Prepare a copy first: quota failures and conflicts cannot overwrite user files. */
-export function prepareYm2203Library(files: ProjectFiles, tabs: readonly EditorWorkspaceTab[], score = false, tone = false): ProjectSnapshot {
+export function prepareYm2203Library(files: ProjectFiles, tabs: readonly EditorWorkspaceTab[], score = false, tone = false, player?: "mml" | "bin"): ProjectSnapshot {
   const next = new ProjectFiles(files.snapshot());
-  const libraries = libraryPaths(score, tone);
+  const libraries = libraryPaths(score, tone, player);
   const conflicts = new Set<string>();
   for (const [path, source] of libraries) {
     const module = path.slice(4, -3);
@@ -51,17 +60,23 @@ export function prepareYm2203Library(files: ProjectFiles, tabs: readonly EditorW
     }
     if (stored !== source) next.write(path, new TextEncoder().encode(source));
   }
+  if (player === "bin") {
+    const demo = ym2203DemoBin(), existing = files.get(YM2203_DEMO_BIN_PATH);
+    if (existing && (existing.kind !== "file" || existing.data.length !== demo.length || !existing.data.every((v, i) => v === demo[i]))) conflicts.add(YM2203_DEMO_BIN_PATH);
+    else if (!existing) next.write(YM2203_DEMO_BIN_PATH, demo);
+  }
   if (conflicts.size) throw new YmLibraryConflict([...conflicts]);
   return next.snapshot();
 }
 
 /** Explicit recovery: preserve both stored bytes and unsaved drafts, then install. */
-export function backupYm2203Library(files: ProjectFiles, tabs: readonly EditorWorkspaceTab[], score = false, tone = false) {
+export function backupYm2203Library(files: ProjectFiles, tabs: readonly EditorWorkspaceTab[], score = false, tone = false, player?: "mml" | "bin") {
   const next = new ProjectFiles(files.snapshot());
-  const roots = libraryPaths(score, tone).flatMap(([path]) => {
+  const roots = libraryPaths(score, tone, player).flatMap(([path]) => {
     const module = path.slice(4, -3);
     return [path, `lib/${module}`, `${module}.py`, module];
   });
+  if (player === "bin") roots.push(YM2203_DEMO_BIN_PATH);
   let index = 1;
   while (next.get(`ym2203-backups/${index}`)) index++;
   const backupPath = `ym2203-backups/${index}`;
@@ -75,5 +90,5 @@ export function backupYm2203Library(files: ProjectFiles, tabs: readonly EditorWo
     if (!isSaved) next.write(path, new TextEncoder().encode(tab.source));
     return { ...tab, path };
   });
-  return { snapshot: prepareYm2203Library(next, movedTabs, score, tone), tabs: movedTabs, backupPath };
+  return { snapshot: prepareYm2203Library(next, movedTabs, score, tone, player), tabs: movedTabs, backupPath };
 }
