@@ -140,6 +140,17 @@ PlaywrightのFirefoxとWebKitは、それぞれ製品版FirefoxとSafariの代�
 インストール済みブラウザを公式のWebDriverで起動し、独立したテストセッションで確認する。
 追加の本番依存パッケージは不要。
 
+Windows CIのFirefoxは使い捨てのheadlessプロファイルで動かす。
+`WEB_LAB_FIREFOX_AUTOPLAY=allow`を指定した検証だけ、`media.autoplay.default=0`を設定する。
+これは[Firefoxの自動再生許可設定](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay)であり、
+公開アプリや利用者のプロファイル設定は変更しない。指定しない製品版検証はブラウザの既定設定を保持する。
+このCIは初期ミュートと実際のFM／SSG波形・予約完了・停止を検証するが、
+Firefoxの既定の自動再生ブロックをクリックで解除できることや実スピーカーの聴感を保証しない。
+失敗時のJSONには検証用のFirefox設定と音声パネルの状態・配送・演奏メトリクスを記録する。
+
+同梱Pythonは`.gitattributes`でLFを指定する。Windowsの自動CRLF変換で、
+エディタのLF正規化や旧ライブラリの完全一致比較に差が生じることを防ぐ。
+
 ```sh
 ./scripts/use-node.sh pnpm build:sakura
 # 別端末で公式geckodriverを起動
