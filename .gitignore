@@ -6,6 +6,8 @@ test-results/
 .vite/
 coverage/
 .cache/
+# Local playback-test inputs and generated BIN/project archives (not redistributed).
+/local-test-data/
 *.log
 *.tsbuildinfo
 __pycache__/

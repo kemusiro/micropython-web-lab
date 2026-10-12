@@ -257,6 +257,10 @@ Ensemble, patch controls and Pocket Signal remain as additional examples.
 See the [WYM1 binary format](docs/devices/ym2203-bin-format.md) and
 [conversion prompt](docs/devices/ym2203-conversion-prompt.md).
 
+Store locally generated playback-test BINs, import ZIPs, input logs and conversion records in
+`local-test-data/ym2203/<test-name>/`. The entire directory is ignored by Git and excluded from
+the remote repository and bundled samples. It is a storage location separate from caches.
+
 Open `/fm-prototype.html`, enable audio, and run the sample to hear an I2C-controlled YM2203 module.
 The sample plays C–D–E–F–G–F–E–D–C using FM alone, then SSG alone, at the same pitch and tempo.
 Python can finish while playback continues. Stop, restart, mute, bounded scheduling, and failure recovery

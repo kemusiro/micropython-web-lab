@@ -170,6 +170,10 @@ BINで大きなレジスタ列を逐次転送できます。合奏・音色設�
 [BIN仕様](docs/devices/ym2203-bin-format.md)、[ChatGPTへの変換プロンプト例](docs/devices/ym2203-conversion-prompt.md)、
 [使い方ガイド](https://asamomiji.jp/articles/micropython-web-lab-guide/#ym2203)も参照してください。
 
+ローカルで作成する再生テスト用のBIN、取り込み用ZIP、入力ログ、変換記録は
+`local-test-data/ym2203/<test-name>/`へ保存します。このディレクトリ全体はGitの追跡対象外で、
+リモートリポジトリや配布サンプルには含めません。キャッシュとは別の保存先として扱います。
+
 音源サンプルは編集可能なPythonドライバーもプロジェクトへ追加します。音色プリセット、
 MIDIノートと休符、予約演奏の指定方法は[音源ドライバーガイド](docs/devices/ym2203-driver.md)を参照してください。
 「合奏サンプル」ではFM 3ch＋SSG 3chのメロディ・伴奏・ベースを一度に予約できます。
