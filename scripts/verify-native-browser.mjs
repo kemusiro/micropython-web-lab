@@ -205,6 +205,21 @@ try {
   const scope = `${sound} [data-ym-scope]`;
   const metric = name => `Number(document.querySelector(${JSON.stringify(scope)})?.dataset[${JSON.stringify(name)}])`;
   await check("YM2203 muted connection, isolated FM and SSG reservations, stop and recovery", async () => {
+    // Observe the actual resume calls without changing their promises or policy.
+    await js(`window.webLabAudioProbe = [];
+      const resume = AudioContext.prototype.resume;
+      AudioContext.prototype.resume = function() {
+        let entry = window.webLabAudioProbe.find(e => e.context === this);
+        if (!entry) {
+          entry = {context: this, events: []}; window.webLabAudioProbe.push(entry);
+          this.addEventListener('statechange', () => entry.events.push({event:'state', state:this.state, time:this.currentTime}));
+        }
+        entry.events.push({event:'resume', state:this.state, time:this.currentTime});
+        const promise = resume.call(this);
+        promise.then(() => entry.events.push({event:'resumed', state:this.state, time:this.currentTime}),
+          error => entry.events.push({event:'error', message:String(error)}));
+        return promise;
+      };`);
     await click("#open-device-configuration");
     await click('[data-connection-device-toggle="ym2203-prototype"]');
     await click(".connection-editor-actions button:last-child");
@@ -258,6 +273,10 @@ try {
       visibility: document.visibilityState,
       focused: document.hasFocus(),
       activated: navigator.userActivation?.hasBeenActive,
+      contexts: window.webLabAudioProbe?.map(({context, events}) => ({
+        state: context.state, time: context.currentTime, sampleRate: context.sampleRate,
+        baseLatency: context.baseLatency, events,
+      })),
       state: document.querySelector(".ym-audio-panel")?.dataset.audioState,
       status: document.querySelector("[data-ym-status]")?.textContent,
       muted: document.querySelector("[data-ym-mute]")?.getAttribute("aria-pressed"),
