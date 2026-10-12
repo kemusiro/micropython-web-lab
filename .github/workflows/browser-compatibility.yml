@@ -46,7 +46,6 @@ jobs:
       - name: Firefox shared inputs, reset and failure recovery
         if: matrix.suite == 'firefox'
         env:
-          WEB_LAB_FIREFOX_AUTOPLAY: allow
           WEB_LAB_FIREFOX_AUDIO_OUTPUT: mock
           MOZ_LOG: cubeb:5,MediaTrackGraph:4,AudioContext:5
         shell: pwsh

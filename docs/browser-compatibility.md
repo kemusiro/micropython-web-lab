@@ -141,21 +141,18 @@ PlaywrightのFirefoxとWebKitは、それぞれ製品版FirefoxとSafariの代�
 追加の本番依存パッケージは不要。
 
 Windows CIのFirefoxは使い捨てのheadlessプロファイルで動かす。
-`WEB_LAB_FIREFOX_AUTOPLAY=allow`を指定した検証だけ、`media.autoplay.default=0`、
-`media.autoplay.block-webaudio=false`、`media.block-autoplay-until-in-foreground=false`を設定する。
-これは[Firefoxの自動再生許可設定](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay)であり、
-公開アプリや利用者のプロファイル設定は変更しない。指定しない製品版検証はブラウザの既定設定を保持する。
-このCIは初期ミュートと実際のFM／SSG波形・予約完了・停止を検証するが、
-Firefoxの既定の自動再生ブロックをクリックで解除できること、実ハードウェア出力や実スピーカーの聴感を保証しない。
-失敗時のJSONには検証用のFirefox設定と音声パネルの状態・配送・演奏メトリクスを記録する。
-
-WindowsのGitHub-hosted runnerではFirefoxの出力チャンネル数が0になり、
+GitHub-hosted runnerではFirefoxの出力チャンネル数が0になり、
 `AudioContext.resume()`が完了しないことを音声グラフのログで確認した。
 このCIだけ`WEB_LAB_FIREFOX_AUDIO_OUTPUT=mock`で
 [Mozillaのテスト用cubeb出力](https://searchfox.org/firefox-main/source/dom/media/CubebUtils.cpp)を使用する。
 実際のYM2203 WASM、AudioWorklet、配送と演奏時計、FM／SSGのRMS判定は維持する。
 テスト用出力に対応しないFirefoxでも音声テストを省略せず、準備やRMS判定の失敗を報告する。
 環境変数を指定しない製品版検証では実際の音声出力を使用する。
+自動再生の制限はブラウザの既定設定を保持し、実際のクリックから音声を開始する。
+公開アプリや利用者のプロファイル設定は変更しない。
+このCIは初期ミュートと実際のFM／SSG波形・予約完了・停止を検証するが、
+実ハードウェア出力や実スピーカーの聴感を保証しない。
+失敗時のJSONには検証用のFirefox設定、音声時計、再開処理、パネルの状態と演奏メトリクスを記録する。
 
 同梱Pythonは`.gitattributes`でLFを指定する。Windowsの自動CRLF変換で、
 エディタのLF正規化や旧ライブラリの完全一致比較に差が生じることを防ぐ。

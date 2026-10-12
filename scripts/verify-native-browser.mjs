@@ -7,10 +7,6 @@ import { browserFixture } from "./lib/browser-fixture.mjs";
 
 const browser = process.env.WEB_LAB_BROWSER ?? "firefox";
 if (!["firefox", "safari"].includes(browser)) throw new Error("Use firefox or safari");
-const firefoxAutoplay = process.env.WEB_LAB_FIREFOX_AUTOPLAY;
-if (firefoxAutoplay !== undefined && firefoxAutoplay !== "allow") {
-  throw new Error("WEB_LAB_FIREFOX_AUTOPLAY must be allow or unset");
-}
 const firefoxAudioOutput = process.env.WEB_LAB_FIREFOX_AUDIO_OUTPUT;
 if (firefoxAudioOutput !== undefined && firefoxAudioOutput !== "mock") {
   throw new Error("WEB_LAB_FIREFOX_AUDIO_OUTPUT must be mock or unset");
@@ -93,13 +89,6 @@ try {
   const capabilities = { browserName: browser };
   if (browser === "firefox") {
     const prefs = { "intl.accept_languages": "ja-JP" };
-    // Headless profiles can block Web Audio or background playback.
-    // Opt in only for the disposable CI profile; keep real-user defaults.
-    if (firefoxAutoplay === "allow") {
-      prefs["media.autoplay.default"] = 0;
-      prefs["media.autoplay.block-webaudio"] = false;
-      prefs["media.block-autoplay-until-in-foreground"] = false;
-    }
     // Mozilla's clock-driven test output keeps the real AudioWorklet graph
     // running when a hosted runner has no audio endpoint. No DSP is mocked.
     if (firefoxAudioOutput === "mock") prefs["media.cubeb.force_mock_context"] = true;
@@ -218,7 +207,7 @@ try {
       AudioContext.prototype.resume = function() {
         let entry = window.webLabAudioProbe.find(e => e.context === this);
         if (!entry) {
-        entry = {context: this, events: []}; window.webLabAudioProbe.push(entry);
+          entry = {context: this, events: []}; window.webLabAudioProbe.push(entry);
           this.addEventListener('statechange', () => entry.events.push({event:'state', state:this.state, time:this.currentTime}));
         }
         entry.events.push({event:'resume', state:this.state, time:this.currentTime});
