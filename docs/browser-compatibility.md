@@ -156,6 +156,8 @@ GitHub-hosted runnerではFirefoxの出力チャンネル数が0になり、
 
 同梱Pythonは`.gitattributes`でLFを指定する。Windowsの自動CRLF変換で、
 エディタのLF正規化や旧ライブラリの完全一致比較に差が生じることを防ぐ。
+Python例外による消音テストは、発音を観測してからGP15の仮想ボタン入力で例外を起こす。
+クリック処理中に短い発音期間が終わる環境でも、発音と例外後の消音を順序どおり検証する。
 
 ```sh
 ./scripts/use-node.sh pnpm build:sakura

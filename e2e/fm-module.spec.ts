@@ -315,11 +315,23 @@ test("sound is stopped on host stop, restart, and Python errors", async ({ page 
   await expect(page.locator(`${cardSelector} [data-ym-scope]`)).toHaveAttribute("data-active", "false");
   await page.locator("#restart-button").click();
   await expect(page.locator("#runtime-status")).toHaveText("実行可能");
-  await page.locator("#code-editor").fill(sound + 'from time import sleep_ms\nsleep_ms(400)\nraise ValueError("sound test error")');
+  // Hold the note until the browser has observed it. A fixed 400 ms window
+  // can end before a loaded runner returns from click() and samples the RMS.
+  const button = page.locator('[data-device-instance="button-gp15"] [data-device-component="press"] button');
+  await expect(button).toHaveAttribute("data-pressed", "false");
+  await page.locator("#code-editor").fill(sound + 'from machine import Pin\nbutton = Pin(15, Pin.IN, Pin.PULL_UP)\nprint("sound error waiting")\nwhile button.value():\n    pass\nraise ValueError("sound test error")');
   await page.locator("#run-script-button").click();
+  await expect(page.locator("#terminal")).toContainText("sound error waiting");
   await expect.poll(() => outputRms(page), { intervals: [30] }).toBeGreaterThan(0.0001);
-  await expect(page.locator("#terminal")).toContainText("sound test error");
-  await expect.poll(() => outputRms(page)).toBeLessThan(1e-6);
+  await button.focus();
+  await page.keyboard.down("Space");
+  try {
+    await expect(page.locator("#terminal")).toContainText("ValueError: sound test error");
+    await expect.poll(() => outputRms(page)).toBeLessThan(1e-6);
+    await expect(page.locator(`${cardSelector} [data-ym-scope]`)).toHaveAttribute("data-active", "false");
+  } finally {
+    await page.keyboard.up("Space");
+  }
 });
 
 test("connected audio starts muted and disconnecting closes the audio context", async ({ page }) => {
