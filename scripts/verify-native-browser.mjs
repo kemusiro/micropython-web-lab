@@ -7,6 +7,10 @@ import { browserFixture } from "./lib/browser-fixture.mjs";
 
 const browser = process.env.WEB_LAB_BROWSER ?? "firefox";
 if (!["firefox", "safari"].includes(browser)) throw new Error("Use firefox or safari");
+const firefoxAutoplay = process.env.WEB_LAB_FIREFOX_AUTOPLAY;
+if (firefoxAutoplay !== undefined && firefoxAutoplay !== "allow") {
+  throw new Error("WEB_LAB_FIREFOX_AUTOPLAY must be allow or unset");
+}
 const endpoint = new URL(process.env.WEB_LAB_WEBDRIVER ?? "http://127.0.0.1:4444");
 if (!["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname)) throw new Error("WebDriver must be loopback-only");
 const fixture = await browserFixture(process.env.WEB_LAB_DIST ?? "dist");
@@ -83,7 +87,14 @@ async function check(name, work) {
 }
 try {
   const capabilities = { browserName: browser };
-  if (browser === "firefox") capabilities["moz:firefoxOptions"] = { args: ["-headless"], prefs: { "intl.accept_languages": "ja-JP" } };
+  if (browser === "firefox") {
+    const prefs = { "intl.accept_languages": "ja-JP" };
+    // WebDriver's headless click may leave Web Audio blocked by autoplay.
+    // Opt in only for the disposable CI profile; keep real-user defaults.
+    if (firefoxAutoplay === "allow") prefs["media.autoplay.default"] = 0;
+    capabilities["moz:firefoxOptions"] = { args: ["-headless"], prefs };
+    report.firefoxPreferences = prefs;
+  }
   const created = await command("/session", { capabilities: { alwaysMatch: capabilities } });
   session = created.sessionId;
   report.capabilities = { browserName: created.capabilities.browserName, browserVersion: created.capabilities.browserVersion, platformName: created.capabilities.platformName };

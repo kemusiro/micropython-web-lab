@@ -45,6 +45,8 @@ jobs:
           Expand-Archive .cache/browser-coverage/geckodriver.zip .cache/browser-coverage -Force
       - name: Firefox shared inputs, reset and failure recovery
         if: matrix.suite == 'firefox'
+        env:
+          WEB_LAB_FIREFOX_AUTOPLAY: allow
         shell: pwsh
         run: |
           pnpm build:sakura
