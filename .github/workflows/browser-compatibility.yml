@@ -47,10 +47,12 @@ jobs:
         if: matrix.suite == 'firefox'
         env:
           WEB_LAB_FIREFOX_AUTOPLAY: allow
+          MOZ_LOG: cubeb:5,MediaTrackGraph:4,AudioContext:5
         shell: pwsh
         run: |
           pnpm build:sakura
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:MOZ_LOG_FILE = Join-Path (Get-Location) '.cache/browser-coverage/firefox-audio.log'
           $driver = Start-Process .cache/browser-coverage/geckodriver.exe -ArgumentList '--port','4444' -PassThru -RedirectStandardOutput .cache/browser-coverage/driver.log -RedirectStandardError .cache/browser-coverage/driver-error.log
           try {
             for ($attempt = 0; $attempt -lt 50; $attempt++) {
@@ -67,5 +69,5 @@ jobs:
           name: windows-browser-compatibility-${{ matrix.suite }}
           path: |
             test-results/
-            .cache/browser-coverage/*.log
+            .cache/browser-coverage/*.log*
           retention-days: 14
