@@ -149,6 +149,14 @@ Windows CIのFirefoxは使い捨てのheadlessプロファイルで動かす。
 Firefoxの既定の自動再生ブロックをクリックで解除できること、実ハードウェア出力や実スピーカーの聴感を保証しない。
 失敗時のJSONには検証用のFirefox設定と音声パネルの状態・配送・演奏メトリクスを記録する。
 
+WindowsのGitHub-hosted runnerではFirefoxの出力チャンネル数が0になり、
+`AudioContext.resume()`が完了しないことを音声グラフのログで確認した。
+このCIだけ`WEB_LAB_FIREFOX_AUDIO_OUTPUT=mock`で
+[Mozillaのテスト用cubeb出力](https://searchfox.org/firefox-main/source/dom/media/CubebUtils.cpp)を使用する。
+実際のYM2203 WASM、AudioWorklet、配送と演奏時計、FM／SSGのRMS判定は維持する。
+テスト用出力に対応しないFirefoxでも音声テストを省略せず、準備やRMS判定の失敗を報告する。
+環境変数を指定しない製品版検証では実際の音声出力を使用する。
+
 同梱Pythonは`.gitattributes`でLFを指定する。Windowsの自動CRLF変換で、
 エディタのLF正規化や旧ライブラリの完全一致比較に差が生じることを防ぐ。
 

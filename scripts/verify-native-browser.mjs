@@ -11,6 +11,10 @@ const firefoxAutoplay = process.env.WEB_LAB_FIREFOX_AUTOPLAY;
 if (firefoxAutoplay !== undefined && firefoxAutoplay !== "allow") {
   throw new Error("WEB_LAB_FIREFOX_AUTOPLAY must be allow or unset");
 }
+const firefoxAudioOutput = process.env.WEB_LAB_FIREFOX_AUDIO_OUTPUT;
+if (firefoxAudioOutput !== undefined && firefoxAudioOutput !== "mock") {
+  throw new Error("WEB_LAB_FIREFOX_AUDIO_OUTPUT must be mock or unset");
+}
 const endpoint = new URL(process.env.WEB_LAB_WEBDRIVER ?? "http://127.0.0.1:4444");
 if (!["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname)) throw new Error("WebDriver must be loopback-only");
 const fixture = await browserFixture(process.env.WEB_LAB_DIST ?? "dist");
@@ -96,6 +100,9 @@ try {
       prefs["media.autoplay.block-webaudio"] = false;
       prefs["media.block-autoplay-until-in-foreground"] = false;
     }
+    // Mozilla's clock-driven test output keeps the real AudioWorklet graph
+    // running when a hosted runner has no audio endpoint. No DSP is mocked.
+    if (firefoxAudioOutput === "mock") prefs["media.cubeb.force_mock_context"] = true;
     capabilities["moz:firefoxOptions"] = { args: ["-headless"], prefs };
     report.firefoxPreferences = prefs;
   }
@@ -211,7 +218,7 @@ try {
       AudioContext.prototype.resume = function() {
         let entry = window.webLabAudioProbe.find(e => e.context === this);
         if (!entry) {
-          entry = {context: this, events: []}; window.webLabAudioProbe.push(entry);
+        entry = {context: this, events: []}; window.webLabAudioProbe.push(entry);
           this.addEventListener('statechange', () => entry.events.push({event:'state', state:this.state, time:this.currentTime}));
         }
         entry.events.push({event:'resume', state:this.state, time:this.currentTime});
