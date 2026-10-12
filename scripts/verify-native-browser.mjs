@@ -235,7 +235,18 @@ try {
   });
 } catch (error) {
   report.error = error.message;
-  if (session) report.failureState = await js('return {status:document.querySelector("#runtime-status")?.textContent, terminal:document.querySelector("#terminal")?.textContent, pressed:document.querySelector(\'[data-device-component="press"] button\')?.dataset.pressed}').catch(() => null);
+  if (session) report.failureState = await js(`return {
+    status: document.querySelector("#runtime-status")?.textContent,
+    terminal: document.querySelector("#terminal")?.textContent,
+    pressed: document.querySelector('[data-device-component="press"] button')?.dataset.pressed,
+    audio: {
+      state: document.querySelector(".ym-audio-panel")?.dataset.audioState,
+      status: document.querySelector("[data-ym-status]")?.textContent,
+      muted: document.querySelector("[data-ym-mute]")?.getAttribute("aria-pressed"),
+      playback: document.querySelector("[data-ym-playback]")?.textContent,
+      scope: { ...document.querySelector("[data-ym-scope]")?.dataset },
+    },
+  }`).catch(() => null);
   console.error(error.message);
   process.exitCode = 1;
 } finally {
