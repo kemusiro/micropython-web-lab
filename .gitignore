@@ -8,5 +8,7 @@ coverage/
 .cache/
 *.log
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 .DS_Store
 /web-lab.local.json

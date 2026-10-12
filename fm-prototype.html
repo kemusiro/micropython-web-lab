@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YM2203 FM + SSG · MicroPython Web Lab</title>
+</head>
+<body>
+  <main>
+    <header><a href="./">← MicroPython Web Lab</a><span>音声実現性検証 / PROTOTYPE 01</span></header>
+    <section class="intro"><p class="eyebrow">I2C SOUND MODULE</p><h1>小さな音源。<br />鳴り出す実験。</h1><p>MicroPythonから音色を設定し、FMとSSGをリアルタイム合成。<br />短い楽曲を予約すると、Pythonの終了後もモジュールが演奏します。</p></section>
+    <section class="lab">
+      <div class="module" aria-label="YM2203仮想音源モジュール">
+        <div class="module-top"><span class="brand">WEB LAB / AUDIO</span><span class="address">I2C 0x44</span></div>
+        <h2>YM2203<span>FM + SSG</span></h2><p class="module-caption">3 FM / 3 SSG · 4 MHz · 内蔵アンプ</p>
+        <canvas id="scope" width="640" height="180" aria-label="出力音声の波形（表示振幅は自動調整）"></canvas>
+        <div class="meters"><label>FM <meter id="fm-meter" min="0" max="0.5" value="0"></meter></label><label>SSG <meter id="ssg-meter" min="0" max="0.5" value="0"></meter></label></div>
+        <div class="readout"><span id="playing">STANDBY</span><span id="progress">0 events</span></div>
+        <div class="audio-controls"><button id="enable-audio">音声を有効にする</button><button id="mute-audio" disabled>消音</button></div>
+        <label class="volume">スピーカー音量 <input id="volume" type="range" min="0" max="100" value="60" /></label>
+        <p id="audio-status" role="status">最初に音声を有効にしてください。</p>
+        <div class="pins"><span>GND</span><span>VCC</span><span>SDA · GP8</span><span>SCL · GP9</span></div>
+      </div>
+      <div class="editor-panel">
+        <div class="editor-top"><h2>main.py</h2><span id="runtime-status" role="status">起動中</span></div>
+        <label class="sr-only" for="source">MicroPythonコード</label><textarea id="source" spellcheck="false" wrap="off"></textarea>
+        <div class="buttons"><button id="run" disabled>サンプルを実行</button><button id="stop">停止</button><button id="restart">再起動</button><button id="restore">サンプルに戻す</button></div>
+        <pre id="output" aria-label="実行出力" aria-live="polite"></pre>
+      </div>
+    </section>
+    <section class="notes"><p><strong>試す順番</strong>　① 音声を有効にする　② サンプルを実行　③ FMだけ → SSGだけで「ドレミファソファミレド」を聴く</p><p id="module-status">I2C0 · SDA GP8 / SCL GP9 · 最大約49.7日 / 131,071イベント</p><p>試作：タイマー・BUSY・IRQ・CSM、実機DAC／アンプの電気特性は対象外です。編集内容はこのページでは保存されません。</p><p>非公式のMicroPython／YM2203互換実験です。Yamahaなど各社による承認・提携を示しません。音源：ymfm / BSD-3-Clause（<a href="./ymfm-LICENSE.txt">ライセンス</a>）。</p></section>
+  </main>
+  <script type="module" src="/src/fm-prototype.ts"></script>
+</body>
+</html>

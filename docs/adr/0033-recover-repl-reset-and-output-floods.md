@@ -2,6 +2,7 @@
 
 - 状態: Accepted
 - 日付: 2026-10-04
+- 時間監視は[ADR 0045](0045-disable-the-default-execution-deadline-for-alpha.md)で既定で無効に変更。出力量と実行所有権の追跡は維持。以下は当時の決定。
 
 ## 背景
 

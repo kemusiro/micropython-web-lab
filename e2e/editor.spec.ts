@@ -141,9 +141,12 @@ test("shows actual pdb breakpoints, reveals the paused line, and clears decorati
   await expect(row.locator(".editor-execution-marker")).toBeVisible();
   await expect.poll(() => editor.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await expect(page.locator("#debug-current-line")).toHaveAttribute("data-line", "75");
-  const rowBox = await row.boundingBox();
-  const markerBox = await page.locator("#debug-current-line").boundingBox();
-  expect(Math.abs(rowBox!.y - markerBox!.y)).toBeLessThan(1);
+  // Programmatic scrolling dispatches its scroll event on a later frame.
+  await expect.poll(async () => {
+    const rowBox = await row.boundingBox();
+    const markerBox = await page.locator("#debug-current-line").boundingBox();
+    return Math.abs(rowBox!.y - markerBox!.y);
+  }).toBeLessThan(1);
   await page.locator("#editor-debug-workspace").screenshot({ path: test.info().outputPath("debug-editor.png") });
   await send("clear 75");
   await expect(row).toHaveAttribute("data-breakpoint", "false");

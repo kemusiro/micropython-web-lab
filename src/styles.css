@@ -338,6 +338,9 @@ button.quiet { background: transparent; }
 #draft-status[data-state="saved"] { color: #7ed7a6; }
 #draft-status[data-state="pending"] { color: #e3bd6a; }
 #draft-status[data-state="error"] { color: #efaaa4; }
+.ym-library-recovery { padding: 0.7rem; border: 1px solid #b18d52; border-radius: 8px; font-size: 0.8rem; overflow-wrap: anywhere; }
+.ym-library-recovery p { margin: 0 0 0.5rem; }
+.ym-library-recovery button + button { margin-left: 0.5rem; }
 
 .editor-debug-workspace {
   display: grid;

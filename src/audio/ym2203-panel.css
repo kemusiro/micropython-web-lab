@@ -1,0 +1,13 @@
+.ym-sound-card { border-color: #669b7b; background: linear-gradient(145deg, #203b2c, #111a15 65%); }
+.ym-sound-card .device-ui-components { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ym-audio-panel { display: grid; grid-column: 1 / -1; gap: 0.4rem; margin: 0.6rem 0; }
+.ym-audio-panel canvas { display: block; width: 100%; height: 80px; border: 1px solid #456b59; border-radius: 0.4rem; }
+.ym-audio-meters { display: flex; gap: 0.6rem; align-items: center; font: 0.7rem ui-monospace, monospace; color: #a9e7c4; }
+.ym-audio-meters label { display: flex; gap: 0.3rem; align-items: center; }
+.ym-audio-meters meter { width: 3.5rem; }
+.ym-audio-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.ym-audio-actions button { padding: 0.35rem 0.6rem; font-size: 0.8rem; }
+.ym-audio-volume { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; }
+.ym-audio-volume input { flex: 1; min-width: 0; accent-color: #85d2a4; }
+.ym-audio-panel p { margin: 0; color: #b5c8be; font-size: 0.7rem; overflow-wrap: anywhere; }
+.ym-audio-panel [data-ym-mute][aria-pressed="true"] { background: #245d42; border-color: #8bf2bf; }

@@ -32,9 +32,13 @@ test("retreats files outside a stuck worker and enforces the 4 MiB quota", async
   test.setTimeout(45_000);
   await page.goto("/"); const ready = page.getByText("実行可能", { exact: true }); const terminal = page.locator("#terminal");
   await expect(ready).toBeVisible();
-  await page.locator("#code-editor").fill("import time\nwith open('before-loop.txt', 'w') as f:\n f.write('kept')\nfor i in range(10):\n with open('before-loop.txt', 'a') as f:\n  f.write('!')\n time.sleep_ms(100)\nwhile True:\n pass");
+  await page.locator("#code-editor").fill("import time\nwith open('before-loop.txt', 'w') as f:\n f.write('kept')\nfor i in range(10):\n with open('before-loop.txt', 'a') as f:\n  f.write('!')\n time.sleep_ms(100)\nprint('loop-started')\nwhile True:\n pass");
   await page.locator("#run-script-button").click();
-  await expect(terminal).toContainText("実行時間が10秒", { timeout: 15_000 }); await expect(ready).toBeVisible();
+  await expect(terminal).toContainText("loop-started");
+  await page.locator("#stop-button").click();
+  await expect(page.locator("#runtime-status")).toHaveText("停止中");
+  await page.locator("#restart-button").click();
+  await expect(ready).toBeVisible();
   await page.locator("#repl-input").fill("print('recovered-file', open('before-loop.txt').read())"); await page.locator("#send-button").click();
   await expect(terminal).toContainText("recovered-file kept");
   await page.locator("#code-editor").fill("import os\ntry:\n with open('large.bin', 'wb') as f:\n  while True:\n   f.write(b'x' * 4096)\nexcept OSError as error:\n print('quota-error', error)\nprint('large-size', os.stat('large.bin')[6])");

@@ -1,5 +1,18 @@
 import { expect, test } from "./workspace-test";
 
+test("nested Python calls preserve live objects across GC and permit later execution", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#runtime-status")).toHaveText("実行可能");
+  const source = "def descend(depth, recurse):\n    if depth == 0:\n        import gc\n        keep = bytearray(b'gc-root')\n        gc.collect()\n        return bytes(keep)\n    return recurse(depth - 1, recurse)\nprint('nested-gc', descend(12, descend))";
+  await page.locator("#code-editor").fill(source);
+  await page.locator("#run-script-button").click();
+  await expect(page.locator("#terminal")).toContainText("nested-gc b'gc-root'");
+  await expect(page.locator("#runtime-status")).toHaveText("実行可能");
+  await page.locator("#code-editor").fill('print("after-nested-gc", 6 * 7)');
+  await page.locator("#run-script-button").click();
+  await expect(page.locator("#terminal")).toContainText("after-nested-gc 42");
+});
+
 test("Ctrl+D resets Python state and outputs while preserving editor and analog input", async ({ page }) => {
   await page.goto("/");
   const ready = page.getByText("実行可能", { exact: true });
@@ -63,7 +76,7 @@ for (const [name, body] of [
 }
 
 
-test("enforces the time limit for a REPL block executed with Ctrl+D", async ({ page }) => {
+test("Ctrl+D REPL execution has no deadline and can be interrupted", async ({ page }) => {
   await page.goto("/");
   const ready = page.getByText("実行可能", { exact: true });
   const terminal = page.locator("#terminal");
@@ -75,9 +88,13 @@ test("enforces the time limit for a REPL block executed with Ctrl+D", async ({ p
   await page.keyboard.press("Enter");
   await expect(terminal).toContainText("... ");
   await page.keyboard.press("Control+d");
-  await expect(terminal).toContainText("実行時間が10秒の上限を超えた", { timeout: 15_000 });
+  await page.waitForTimeout(11_500); // Cross the former deadline with an actual infinite WASM loop.
+  await expect(terminal).not.toContainText("上限を超えた");
+  await expect(page.locator("#run-script-button")).toBeDisabled();
+  await page.keyboard.press("Control+c");
+  await expect(terminal).toContainText("実行中のコードを強制停止");
   await expect(ready).toBeVisible();
-  await page.locator("#repl-input").fill('print("after timeout", 42)');
+  await page.locator("#repl-input").fill('print("after interruption", 42)');
   await page.getByRole("button", { name: "REPLへ送信" }).click();
-  await expect(terminal).toContainText("after timeout 42");
+  await expect(terminal).toContainText("after interruption 42");
 });

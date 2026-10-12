@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  MAX_RUNTIME_EXECUTION_MS,
   MAX_RUNTIME_OUTPUT_CHARACTERS,
   UNEXPECTED_WORKER_RECOVERY_WINDOW_MS,
   RuntimeClient,
@@ -14,6 +13,7 @@ import {
 } from "../simulation/shared-device-inputs";
 import { SharedDebuggerChannel } from "./debugger-channel";
 import { MANAGED_CONNECTION_GRAPH } from "../connections/managed-connection-graph";
+const EXECUTION_LIMIT_MS = 10_000;
 
 const readyMessage = {
   version: RUNTIME_PROTOCOL_VERSION,
@@ -47,6 +47,40 @@ class FakeWorker implements RuntimeWorker {
 }
 
 describe("RuntimeClient", () => {
+  for (const operation of ["script", "debug", "repl"] as const) {
+    it(`runs ${operation} without a default deadline and still permits stop/restart`, () => {
+      vi.useFakeTimers();
+      try {
+        const first = new FakeWorker(), second = new FakeWorker();
+        const workers = [first, second], onMessage = vi.fn(), onReplBusy = vi.fn();
+        const client = new RuntimeClient({ onMessage, onStatus: vi.fn(), onReplBusy }, () => workers.shift()!);
+        client.start(); first.emit(readyMessage);
+        if (operation === "repl") client.sendInput("while True: pass\r");
+        else client.executeScript("while True: pass", operation === "debug" ? "debug" : "run");
+        vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+        expect(first.terminate).not.toHaveBeenCalled();
+        expect(onMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "error" }));
+        expect(client.executeScript("pass")).toBe(false);
+        client.stop(); expect(first.terminate).toHaveBeenCalledOnce();
+        expect(client.status).toBe("stopped");
+        if (operation === "repl") expect(onReplBusy).toHaveBeenLastCalledWith(false);
+        client.restart(); second.emit(readyMessage);
+        expect(client.executeScript("pass")).toBe(true);
+        second.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "execution-result", requestId: operation === "repl" ? "execution-1" : "execution-2", ok: true });
+        expect(client.status).toBe("ready");
+      } finally { vi.useRealTimers(); }
+    });
+  }
+
+  it("supports explicit null and rejects invalid watchdog durations before creating a worker", () => {
+    const factory = vi.fn(() => new FakeWorker());
+    expect(() => new RuntimeClient({ onMessage: vi.fn(), onStatus: vi.fn() }, factory, { executionLimitMs: null })).not.toThrow();
+    for (const value of [0, -1, 0.5, NaN, Infinity, 2_147_483_648]) {
+      expect(() => new RuntimeClient({ onMessage: vi.fn(), onStatus: vi.fn() }, factory, { executionLimitMs: value })).toThrow(RangeError);
+    }
+    expect(factory).not.toHaveBeenCalled();
+  });
+
   it("starts the worker and forwards input only after ready", () => {
     const worker = new FakeWorker();
     const statuses: string[] = [];
@@ -333,7 +367,7 @@ describe("RuntimeClient", () => {
       const client = new RuntimeClient(
         { onMessage: vi.fn(), onStatus: (status) => statuses.push(status) },
         () => worker,
-        { debuggerChannel },
+        { debuggerChannel, executionLimitMs: EXECUTION_LIMIT_MS },
       );
 
       client.start();
@@ -350,7 +384,7 @@ describe("RuntimeClient", () => {
         globals: [],
       });
 
-      vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS);
+      vi.advanceTimersByTime(EXECUTION_LIMIT_MS);
       expect(worker.terminate).not.toHaveBeenCalled();
       expect(client.status).toBe("debugging");
 
@@ -464,12 +498,13 @@ describe("RuntimeClient", () => {
           }
           return worker;
         },
+        { executionLimitMs: EXECUTION_LIMIT_MS },
       );
 
       client.start();
       firstWorker.emit(readyMessage);
       client.executeScript("while True: pass");
-      vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS);
+      vi.advanceTimersByTime(EXECUTION_LIMIT_MS);
 
       expect(firstWorker.terminate).toHaveBeenCalledOnce();
       expect(secondWorker.postMessage).toHaveBeenCalledWith({
@@ -528,6 +563,7 @@ describe("RuntimeClient", () => {
       const client = new RuntimeClient(
         { onMessage: vi.fn(), onStatus: vi.fn() },
         () => worker,
+        { executionLimitMs: EXECUTION_LIMIT_MS },
       );
 
       client.start();
@@ -539,7 +575,7 @@ describe("RuntimeClient", () => {
         data: "... ",
       });
       worker.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-ready", requestId: "input-1" });
-      vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS);
+      vi.advanceTimersByTime(EXECUTION_LIMIT_MS);
 
       expect(worker.terminate).not.toHaveBeenCalled();
       expect(client.status).toBe("ready");
@@ -589,6 +625,7 @@ it("ignores output prompts and stale acknowledgments during REPL execution", () 
     const client = new RuntimeClient(
       { onMessage: vi.fn(), onStatus: vi.fn() },
       () => workers.shift()!,
+      { executionLimitMs: EXECUTION_LIMIT_MS },
     );
     client.start();
     first.emit(readyMessage);
@@ -596,7 +633,7 @@ it("ignores output prompts and stale acknowledgments during REPL execution", () 
     first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "stdout", data: "\r\n... " });
     first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-executing", requestId: "input-1" });
     first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "repl-ready", requestId: "input-stale" });
-    vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS);
+    vi.advanceTimersByTime(EXECUTION_LIMIT_MS);
     expect(first.terminate).toHaveBeenCalledOnce();
     expect(client.status).toBe("starting");
   } finally {
@@ -613,13 +650,13 @@ it("waits for durable checkpoints before reporting completion and restores files
     const saved = new Promise<void>(resolve => { finish = resolve; });
     const onMessage = vi.fn();
     const project = { version: 1 as const, entries: [{ kind: "file" as const, path: "data", data: new Uint8Array([42]) }] };
-    const client = new RuntimeClient({ onMessage, onStatus: vi.fn(), onCheckpoint: () => saved }, () => workers.shift()!, { project: { version: 1, entries: [] } });
+    const client = new RuntimeClient({ onMessage, onStatus: vi.fn(), onCheckpoint: () => saved }, () => workers.shift()!, { project: { version: 1, entries: [] }, executionLimitMs: EXECUTION_LIMIT_MS });
     client.start(); first.emit(readyMessage);
     client.executeScript("print(42)");
     first.emit({ version: RUNTIME_PROTOCOL_VERSION, type: "filesystem", revision: 1, checkpoint: true, project });
     const completion = first.onmessage!({ data: { version: RUNTIME_PROTOCOL_VERSION, type: "execution-result", requestId: "execution-1", ok: true } } as MessageEvent);
     expect(client.status).toBe("executing");
-    vi.advanceTimersByTime(MAX_RUNTIME_EXECUTION_MS * 2);
+    vi.advanceTimersByTime(EXECUTION_LIMIT_MS * 2);
     expect(first.terminate).not.toHaveBeenCalled();
     finish(); await completion;
     expect(client.status).toBe("ready");

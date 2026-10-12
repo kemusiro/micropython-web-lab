@@ -7,6 +7,10 @@ import { browserFixture } from "./lib/browser-fixture.mjs";
 
 const browser = process.env.WEB_LAB_BROWSER ?? "firefox";
 if (!["firefox", "safari"].includes(browser)) throw new Error("Use firefox or safari");
+const firefoxAudioOutput = process.env.WEB_LAB_FIREFOX_AUDIO_OUTPUT;
+if (firefoxAudioOutput !== undefined && firefoxAudioOutput !== "mock") {
+  throw new Error("WEB_LAB_FIREFOX_AUDIO_OUTPUT must be mock or unset");
+}
 const endpoint = new URL(process.env.WEB_LAB_WEBDRIVER ?? "http://127.0.0.1:4444");
 if (!["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname)) throw new Error("WebDriver must be loopback-only");
 const fixture = await browserFixture(process.env.WEB_LAB_DIST ?? "dist");
@@ -83,7 +87,14 @@ async function check(name, work) {
 }
 try {
   const capabilities = { browserName: browser };
-  if (browser === "firefox") capabilities["moz:firefoxOptions"] = { args: ["-headless"], prefs: { "intl.accept_languages": "ja-JP" } };
+  if (browser === "firefox") {
+    const prefs = { "intl.accept_languages": "ja-JP" };
+    // Mozilla's clock-driven test output keeps the real AudioWorklet graph
+    // running when a hosted runner has no audio endpoint. No DSP is mocked.
+    if (firefoxAudioOutput === "mock") prefs["media.cubeb.force_mock_context"] = true;
+    capabilities["moz:firefoxOptions"] = { args: ["-headless"], prefs };
+    report.firefoxPreferences = prefs;
+  }
   const created = await command("/session", { capabilities: { alwaysMatch: capabilities } });
   session = created.sessionId;
   report.capabilities = { browserName: created.capabilities.browserName, browserVersion: created.capabilities.browserVersion, platformName: created.capabilities.platformName };
@@ -92,6 +103,12 @@ try {
     await navigate(); await ready();
     assert.equal(await js("return crossOriginIsolated && typeof SharedArrayBuffer === 'function'"), true);
     await repl('print("native-start", 6 * 7)'); await output("native-start 42");
+  });
+  await check("nested Python calls and GC preserve live objects", async () => {
+    await run("def descend(depth, recurse):\n    if depth == 0:\n        import gc\n        keep = bytearray(b'gc-root')\n        gc.collect()\n        return bytes(keep)\n    return recurse(depth - 1, recurse)\nprint('native-nested-gc', descend(12, descend))");
+    await output("native-nested-gc b'gc-root'"); await ready();
+    await run('print("native-after-gc", 6 * 7)');
+    await output("native-after-gc 42"); await ready();
   });
   await check("short viewport minimum working heights", async () => {
     await call("/window/rect", { width: 1280, height: 680 });
@@ -180,6 +197,49 @@ try {
     await repl("from machine import Pin; Pin(25, Pin.OUT)"); await output("Unsupported Pico 2 W GPIO pin: 25");
     await repl('print("error-recovered", 42)'); await output("error-recovered 42");
   });
+  const sound = '[data-device-instance="ym2203-prototype"]';
+  const scope = `${sound} [data-ym-scope]`;
+  const metric = name => `Number(document.querySelector(${JSON.stringify(scope)})?.dataset[${JSON.stringify(name)}])`;
+  await check("YM2203 muted connection, isolated FM and SSG reservations, stop and recovery", async () => {
+    // Observe the actual resume calls without changing their promises or policy.
+    await js(`window.webLabAudioProbe = [];
+      const resume = AudioContext.prototype.resume;
+      AudioContext.prototype.resume = function() {
+        let entry = window.webLabAudioProbe.find(e => e.context === this);
+        if (!entry) {
+          entry = {context: this, events: []}; window.webLabAudioProbe.push(entry);
+          this.addEventListener('statechange', () => entry.events.push({event:'state', state:this.state, time:this.currentTime}));
+        }
+        entry.events.push({event:'resume', state:this.state, time:this.currentTime});
+        const promise = resume.call(this);
+        promise.then(() => entry.events.push({event:'resumed', state:this.state, time:this.currentTime}),
+          error => entry.events.push({event:'error', message:String(error)}));
+        return promise;
+      };`);
+    await click("#open-device-configuration");
+    await click('[data-connection-device-toggle="ym2203-prototype"]');
+    await click(".connection-editor-actions button:last-child");
+    await click("#close-device-configuration");
+    await ready();
+    await until(`document.querySelector('${sound} [data-ym-mute]')?.getAttribute("aria-pressed") === "true"`, "initial mute");
+    await click(`${sound} [data-ym-mute]`);
+    await until(`document.querySelector('${sound} .ym-audio-panel')?.dataset.audioState === "ready"`, "audio ready");
+    await click(`${sound} [data-device-example]`);
+    const setup = 'from machine import I2C\nfrom web_lab_ym2203_v1 import YM2203\nsound = YM2203(I2C(0))\nsound.reset()\nsound.volume(30)\nsound.fm_tone()\n';
+    for (const source of ["fm", "ssg"]) {
+      await run(setup + `sound.reserve((60,), source='${source}', step_ms=1500, gate_ms=1200, tail_ms=300)\nprint('native-${source}')`);
+      await output(`native-${source}`); await ready();
+      const other = source === "fm" ? "ssg" : "fm";
+      await until(`${metric(`${source}Rms`)} > 0.001 && ${metric(`${other}Rms`)} < 0.000001 && ${metric("outputRms")} > 0.001`, `${source} isolated audio`);
+      await until(`document.querySelector(${JSON.stringify(scope)}).dataset.playbackState === "completed" && ${metric("applied")} === 4 && ${metric("outputRms")} < 0.000001`, `${source} completed`);
+    }
+    await run(setup + "sound.reserve((60,), step_ms=10000, gate_ms=9000, tail_ms=1000)");
+    await until(`${metric("outputRms")} > 0.001`, "sound before Stop");
+    await click("#stop-button");
+    await until(`${metric("outputRms")} < 0.000001`, "silent after Stop");
+    await click("#restart-button"); await ready();
+    assert.equal(await js(`return ${metric("outputRms")}`), 0);
+  });
   await check("missing isolation shows disabled shared inputs", async () => {
     fixture.setFault("isolation"); await navigate(); await ready();
     assert.equal(await js("return crossOriginIsolated"), false);
@@ -201,7 +261,25 @@ try {
   });
 } catch (error) {
   report.error = error.message;
-  if (session) report.failureState = await js('return {status:document.querySelector("#runtime-status")?.textContent, terminal:document.querySelector("#terminal")?.textContent, pressed:document.querySelector(\'[data-device-component="press"] button\')?.dataset.pressed}').catch(() => null);
+  if (session) report.failureState = await js(`return {
+    status: document.querySelector("#runtime-status")?.textContent,
+    terminal: document.querySelector("#terminal")?.textContent,
+    pressed: document.querySelector('[data-device-component="press"] button')?.dataset.pressed,
+    audio: {
+      visibility: document.visibilityState,
+      focused: document.hasFocus(),
+      activated: navigator.userActivation?.hasBeenActive,
+      contexts: window.webLabAudioProbe?.map(({context, events}) => ({
+        state: context.state, time: context.currentTime, sampleRate: context.sampleRate,
+        baseLatency: context.baseLatency, events,
+      })),
+      state: document.querySelector(".ym-audio-panel")?.dataset.audioState,
+      status: document.querySelector("[data-ym-status]")?.textContent,
+      muted: document.querySelector("[data-ym-mute]")?.getAttribute("aria-pressed"),
+      playback: document.querySelector("[data-ym-playback]")?.textContent,
+      scope: { ...document.querySelector("[data-ym-scope]")?.dataset },
+    },
+  }`).catch(() => null);
   console.error(error.message);
   process.exitCode = 1;
 } finally {

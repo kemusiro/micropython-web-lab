@@ -121,7 +121,7 @@ const ENGLISH_MESSAGES = {
   "draft.checking": "Checking saved state",
   "draft.save": "Save active tab",
   "draft.reset": "Restore initial example",
-  "editor.limit": "Maximum runtime: 10 seconds · Output limit: 100,000 characters",
+  "editor.limit": "Alpha: no execution time limit · Output limit: 100,000 characters",
   "editor.debug": "Debug",
   "editor.run": "Run script",
   "board.title": "Virtual board and devices",
@@ -182,6 +182,7 @@ const ENGLISH_MESSAGES = {
   "footer.disclaimer":
     "This is an unofficial project and is not affiliated with the MicroPython project or MicroPython.org.",
   "footer.raspberryPiTrademark": "Raspberry Pi is a trademark of Raspberry Pi Ltd.",
+  "footer.licenses": "Licenses and credits",
   "draft.resetConfirm":
     "Restore the initial example in the editor? Saved project files will be kept.",
   "draft.unavailable": "Browser storage is unavailable.",
@@ -426,7 +427,7 @@ const JAPANESE_MESSAGES: Record<TranslationKey, string> = {
   "layout.rowResize": "コードエディタとREPLの高さを変更",
   "editor.label": "コードエディタ", "editor.shortcut": "Tab／Shift+Tabでインデント · ⌘/Ctrl + Enterで実行",
   "draft.checking": "保存状態を確認しています", "draft.save": "アクティブなタブを保存",
-  "draft.reset": "初期サンプルに戻す", "editor.limit": "実動時間は最大10秒・出力100,000文字です",
+  "draft.reset": "初期サンプルに戻す", "editor.limit": "アルファ版: 実行時間は無制限・出力100,000文字まで",
   "editor.debug": "デバッグ実行", "editor.run": "スクリプトを実行",
   "board.title": "仮想ボード・デバイス",
   "board.description": "Device Modelの検証済み状態と操作だけを、固定コンポーネントで表示します。",
@@ -465,6 +466,7 @@ const JAPANESE_MESSAGES: Record<TranslationKey, string> = {
   "examples.gpsBeaconOpen": "GPS測位ビーコンを新しいエディタタブで開く",
   "footer.disclaimer": "非公式プロジェクトです。MicroPythonプロジェクトおよびMicroPython.orgとは提携していません。",
   "footer.raspberryPiTrademark": "Raspberry Pi is a trademark of Raspberry Pi Ltd.",
+  "footer.licenses": "ライセンス・出典",
   "draft.resetConfirm": "エディタを初期サンプルへ戻しますか？保存済みのプロジェクトファイルは保持します。",
   "draft.unavailable": "ブラウザ保存を利用できません。", "draft.initial": "初期サンプル（未保存）",
   "draft.restored": "復元用の下書きを復元 · {time}", "draft.pending": "下書きをバックアップ中…",

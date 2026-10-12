@@ -1102,12 +1102,12 @@ test("filters, collapses, and discards connection editor changes", async ({ page
 
   await search.fill("BME280");
   await expect(editor.locator('[data-connection-device]:not([hidden])')).toHaveCount(1);
-  await expect(editor.locator(".connection-filter-summary")).toHaveText("10件中1件を表示");
+  await expect(editor.locator(".connection-filter-summary")).toHaveText("11件中1件を表示");
   await page.getByRole("button", { name: "表示中を折りたたむ" }).click();
   await expect(page.getByRole("button", { name: "BME280環境センサーを展開" })).toBeVisible();
 
   await page.getByRole("button", { name: "絞り込みを解除" }).click();
-  await expect(editor.locator('[data-connection-device]:not([hidden])')).toHaveCount(10);
+  await expect(editor.locator('[data-connection-device]:not([hidden])')).toHaveCount(11);
   await page.getByLabel("押しボタン 入力 接続先").selectOption("GP13");
   await expect(editor.getByText("未適用の変更あり", { exact: true })).toBeVisible();
   await expect(apply).toBeEnabled();
@@ -1130,14 +1130,15 @@ test("selects and deselects every device connection at once", async ({ page }) =
   const checkedToggles = editor.locator("[data-connection-device-toggle]:checked");
   const selectAll = editor.getByRole("button", { name: "すべて選択", exact: true });
   const deselectAll = editor.getByRole("button", { name: "すべて解除", exact: true });
-  await expect(toggles).toHaveCount(10);
+  await expect(toggles).toHaveCount(11);
   await expect(checkedToggles).toHaveCount(10);
-  await expect(selectAll).toBeDisabled();
+  await expect(page.getByLabel("YM2203音源（実験用）を接続")).not.toBeChecked();
+  await expect(selectAll).toBeEnabled();
   await expect(deselectAll).toBeEnabled();
 
   await deselectAll.click();
   await expect(checkedToggles).toHaveCount(0);
-  await expect(editor.locator('[data-connection-device][data-connected="false"]')).toHaveCount(10);
+  await expect(editor.locator('[data-connection-device][data-connected="false"]')).toHaveCount(11);
   await expect(editor.locator(".connection-editor-status")).toContainText(
     "すべてのデバイスの選択を解除しました",
   );
@@ -1146,13 +1147,17 @@ test("selects and deselects every device connection at once", async ({ page }) =
   await expect(editor.getByText("未適用の変更あり", { exact: true })).toBeVisible();
 
   await selectAll.click();
-  await expect(checkedToggles).toHaveCount(10);
-  await expect(editor.locator('[data-connection-device][data-connected="true"]')).toHaveCount(10);
+  await expect(checkedToggles).toHaveCount(11);
+  await expect(editor.locator('[data-connection-device][data-connected="true"]')).toHaveCount(11);
   await expect(editor.locator(".connection-editor-status")).toContainText(
     "すべてのデバイスを選択しました",
   );
   await expect(selectAll).toBeDisabled();
   await expect(deselectAll).toBeEnabled();
+  await expect(editor.getByText("未適用の変更あり", { exact: true })).toBeVisible();
+  await editor.getByRole("button", { name: "変更を取り消す", exact: true }).click();
+  await expect(checkedToggles).toHaveCount(10);
+  await expect(page.getByLabel("YM2203音源（実験用）を接続")).not.toBeChecked();
   await expect(editor.getByText("未適用の変更なし", { exact: true })).toBeVisible();
 });
 
@@ -1597,21 +1602,26 @@ test("blocks unrestricted JavaScript and network modules", async ({ page }) => {
   await expect(terminal).toContainText("1");
 });
 
-test("automatically replaces a worker after the execution time limit", async ({ page }) => {
+test("runs a script past ten seconds without losing Python state", async ({ page }) => {
   await page.goto("/");
 
   const status = page.getByText("実行可能", { exact: true });
   const terminal = page.locator("#terminal");
   await expect(status).toBeVisible();
-  await expect(page.getByText("実動時間は最大10秒・出力100,000文字です")).toBeVisible();
+  await expect(page.getByText("アルファ版: 実行時間は無制限・出力100,000文字まで")).toBeVisible();
 
-  await page.locator("#code-editor").fill("while True:\n    pass");
+  const source = 'from time import sleep_ms\nlong_run_marker = 42\nsleep_ms(11500)\nprint("long run completed", long_run_marker)';
+  await page.locator("#code-editor").fill(source);
   await page.getByRole("button", { name: "スクリプトを実行" }).click();
   await expect(page.getByText("スクリプト実行中", { exact: true })).toBeVisible();
 
-  await expect(terminal).toContainText("実行時間が10秒の上限を超えた", {
+  await expect(terminal).toContainText("long run completed 42", {
     timeout: 15_000,
   });
   await expect(status).toBeVisible();
-  await expect(terminal).toContainText(">>>");
+  await expect(terminal).not.toContainText("上限を超えた");
+  await expect(page.locator("#code-editor")).toHaveValue(source);
+  await page.locator("#repl-input").fill('print("retained state", long_run_marker)');
+  await page.getByRole("button", { name: "REPLへ送信" }).click();
+  await expect(terminal).toContainText("retained state 42");
 });

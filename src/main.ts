@@ -19,7 +19,11 @@ import {
 import { RASPBERRY_PI_PICO_2_W_BOARD_PROFILE } from "./board/raspberry-pi-pico-2-w";
 import { ConnectionEditor, type ConnectionEditorApplyResult } from "./connections/connection-editor";
 import { resolveConnectionGraph, type ConnectionGraphV1 } from "./connections/connection-model";
-import { MANAGED_CONNECTION_GRAPH } from "./connections/managed-connection-graph";
+import { MANAGED_CONNECTION_GRAPH, MANAGED_DEVICE_CATALOG_GRAPH } from "./connections/managed-connection-graph";
+import { createYm2203PrototypeDefinition } from "./devices/ym2203-prototype";
+import { YM_INSTANCE } from "./audio/ym2203-protocol";
+import { YmAudioPanel } from "./audio/ym2203-panel";
+import { YmPatchEditor } from "./audio/ym2203-patch-editor";
 import { createManagedDeviceDefinitions } from "./connections/connection-presets";
 import { localDeviceMetadata } from "virtual:local-device-metadata";
 import type { DeviceAction } from "./device-api/types";
@@ -29,6 +33,9 @@ import {
   referenceDeviceUisForLocale,
 } from "./device-ui/reference-device-ui";
 import { deviceExampleSource, hasDeviceExample } from "./examples/device-examples";
+import { prepareYm2203Library, backupYm2203Library, YmLibraryConflict } from "./examples/ym2203-library";
+import { YM2203_SCORE_EXAMPLE_SOURCE, YM2203_TONE_EXAMPLE_SOURCE } from "./examples/ym2203-example";
+import { POCKET_SIGNAL_EXAMPLE_SOURCE } from "./examples/pocket-signal";
 import { scenarioExampleSource } from "./examples/scenario-examples";
 import { FIRST_EXPERIMENT_SOURCE, FirstExperiment } from "./examples/first-experiment";
 import { loadAppScreen, saveAppScreen, type AppScreen } from "./layout/app-screen";
@@ -114,6 +121,10 @@ const debuggerLocation = requiredElement<HTMLSpanElement>("debugger-location");
 const saveDraftButton = requiredElement<HTMLButtonElement>("save-draft-button");
 const resetDraftButton = requiredElement<HTMLButtonElement>("reset-draft-button");
 const draftStatus = requiredElement<HTMLSpanElement>("draft-status");
+const ymLibraryRecovery = document.createElement("div");
+ymLibraryRecovery.className = "ym-library-recovery";
+ymLibraryRecovery.hidden = true;
+draftStatus.closest(".draft-toolbar")!.insertAdjacentElement("afterend", ymLibraryRecovery);
 const restartButton = requiredElement<HTMLButtonElement>("restart-button");
 const stopButton = requiredElement<HTMLButtonElement>("stop-button");
 const clearButton = requiredElement<HTMLButtonElement>("clear-button");
@@ -229,7 +240,41 @@ const sharedDeviceInputs = window.crossOriginIsolated
 const sharedDebuggerChannel = window.crossOriginIsolated
   ? SharedDebuggerChannel.create()
   : null;
-const managedDeviceDefinitions = createManagedDeviceDefinitions();
+let soundPreviewActive = false;
+const soundPatchEditor = new YmPatchEditor(uiLocale, {
+  toggleMute: () => soundPanel.toggleMute(),
+  restart: () => {
+    if ((runtime.status === "stopped" || runtime.status === "error") && !filePanel.busy && !replRuntimeBusy) runtime.restart();
+  },
+  preview: source => {
+    if (runtime.status !== "ready" || filePanel.busy || replRuntimeBusy || !soundPanel.connected) throw new Error(t("system.waitReady"));
+    if (!soundPanel.audioReady) throw new Error(uiLocale === "ja" ? "音声処理の準備を待ってから試聴してください。" : "Wait for audio preparation before auditioning.");
+    soundPreviewActive = true;
+    if (!runtime.executeScript(source)) { soundPreviewActive = false; throw new Error(t("system.waitReady")); }
+  },
+  export: source => {
+    if (runtime.status !== "ready" || filePanel.busy || replRuntimeBusy || !soundPanel.connected) throw new Error(t("system.waitReady"));
+    if (!projectWorkspace.loaded) throw new Error(t("draft.unavailable"));
+    updateActiveEditorTabSource(codeEditor.value);
+    const snapshot = prepareYm2203Library(projectWorkspace.files, editorTabs, false, true);
+    if (!openEditorTab(uiLocale === "ja" ? "YM2203 編集した音色" : "YM2203 edited patch", source)) throw new Error(t("editor.tabLimit", { count: MAX_EDITOR_TABS }));
+    installYmLibraries(snapshot);
+  },
+  stop: () => {
+    if (!soundPreviewActive) return;
+    soundPreviewActive = false;
+    if (runtime.status === "executing") runtime.stop();
+    soundPanel.stop();
+  },
+  readWave: wave => soundPanel.readWave(wave),
+});
+const soundPanel = new YmAudioPanel(uiLocale, () => openDeviceExample(YM_INSTANCE, "score"), () => openDeviceExample(YM_INSTANCE, "tone"), () => soundPatchEditor.open(), () => openDeviceExample(YM_INSTANCE, "pocket-signal"));
+soundPanel.onMeter = meter => soundPatchEditor.meter(meter);
+const managedDeviceDefinitions = new Map(createManagedDeviceDefinitions());
+// Only manifests are used for validation on the UI thread. The Worker owns the live sink.
+managedDeviceDefinitions.set(YM_INSTANCE, createYm2203PrototypeDefinition(() => {
+  throw new Error("Audio device models must run in the runtime Worker.");
+}));
 const initialConnection = loadInitialConnectionGraph();
 let activeConnectionGraph = initialConnection.graph;
 const deviceUiRenderer = new DeviceUiRenderer(
@@ -247,6 +292,7 @@ const deviceUiRenderer = new DeviceUiRenderer(
     openExample: openDeviceExample,
   },
 );
+mountSoundPanel();
 deviceUiInputStatus.textContent =
   sharedDeviceInputs === null
     ? t("device.inputUnavailable")
@@ -285,8 +331,14 @@ const filePanel = new FilePanel(requiredElement<HTMLElement>("project-files"), {
   busyChanged: () => updateRuntimeStatus(runtime.status),
 });
 
+soundPanel.onState = state => {
+  soundPatchEditor.setAudioState(state);
+};
+soundPatchEditor.setAudioState(soundPanel.state);
+
 new ConnectionEditor(connectionEditorRoot, {
   defaultGraph: localDeviceMetadata?.connectionGraph ?? MANAGED_CONNECTION_GRAPH,
+  ...(localDeviceMetadata === null ? { catalogGraph: MANAGED_DEVICE_CATALOG_GRAPH } : {}),
   initialGraph: activeConnectionGraph,
   board: RASPBERRY_PI_PICO_2_W_BOARD_PROFILE,
   deviceNames: connectionDeviceNames(),
@@ -505,6 +557,8 @@ resetDraftButton.addEventListener("click", () => {
 });
 
 window.addEventListener("pagehide", () => {
+  soundPatchEditor.close();
+  void soundPanel.close();
   if (autosaveTimer !== null) {
     cancelScheduledDraftSave();
     // A bounded synchronous editor journal covers navigation before IndexedDB
@@ -513,6 +567,10 @@ window.addEventListener("pagehide", () => {
     if (draftStorage) saveEditorWorkspace(draftStorage, editorTabs, activeEditorTabId);
     saveCurrentDraft();
   }
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && soundPanel.connected) runtime.stop();
 });
 
 replInput.addEventListener("keydown", (event) => {
@@ -632,6 +690,12 @@ function deviceUiEntries(graph: ConnectionGraphV1): typeof referenceDeviceUis {
   return referenceDeviceUisForConnectionGraph(graph, uiLocale);
 }
 
+function mountSoundPanel(): void {
+  soundPanel.mount(deviceUiRoot.querySelector<HTMLElement>(`[data-device-instance="${YM_INSTANCE}"]`));
+  if (!soundPanel.connected) soundPatchEditor.close();
+  soundPatchEditor.setAvailable(currentRuntimeStatus === "ready" && soundPanel.connected);
+}
+
 function connectedGpioNumber(
   graph: ConnectionGraphV1,
   instanceId: string,
@@ -679,6 +743,7 @@ function applyEditedConnectionGraph(graph: ConnectionGraphV1): ConnectionEditorA
   activeConnectionGraph = graph;
   lastDeviceSequences.clear();
   deviceUiRenderer.replace(deviceUiEntries(graph));
+  mountSoundPanel();
   runtime.setConnectionGraph(graph);
   appendTerminal(t("connection.appliedTerminal"));
   runtime.restart();
@@ -752,6 +817,7 @@ function forceKeyboardInterrupt(): void {
 
 function runCurrentScript(mode: ScriptExecutionMode): void {
   if (filePanel.busy || replRuntimeBusy || runtime.status !== "ready") return;
+  soundPreviewActive = false;
   cancelScheduledDraftSave();
   const source = codeEditor.value;
   if (source.trim().length === 0) {
@@ -1178,15 +1244,73 @@ function closeEditorTab(tabId: string): void {
   codeEditor.focus();
 }
 
-function openDeviceExample(instanceId: string): void {
-  const source = deviceExampleSource(instanceId, {
+function installYmLibraries(snapshot: ProjectSnapshot, restart = false): void {
+  const updated = new Map<string, string>();
+  for (const entry of snapshot.entries) {
+    const previous = projectWorkspace.files.get(entry.path);
+    if (entry.kind === "file" && previous?.kind === "file" && new TextDecoder().decode(entry.data) !== new TextDecoder().decode(previous.data)) {
+      updated.set(entry.path, new TextDecoder().decode(entry.data));
+    }
+  }
+  projectWorkspace.files.replace(snapshot);
+  editorTabs = editorTabs.map(tab => tab.path !== undefined && updated.has(tab.path) ? { ...tab, source: updated.get(tab.path)! } : tab);
+  runtime.setProject(snapshot);
+  // A starting Worker already received its initial snapshot. Recreate it with
+  // the installed libraries so a slow download cannot restore the old files.
+  if (updated.size || restart || runtime.status === "starting") runtime.restart();
+  renderEditorTabs(); filePanel.render();
+}
+
+function openDeviceExample(instanceId: string, kind: "comparison" | "score" | "tone" | "pocket-signal" = "comparison", recover = false): void {
+  const source = instanceId === YM_INSTANCE && kind !== "comparison" ? (kind === "pocket-signal" ? POCKET_SIGNAL_EXAMPLE_SOURCE : kind === "score" ? YM2203_SCORE_EXAMPLE_SOURCE : YM2203_TONE_EXAMPLE_SOURCE) : deviceExampleSource(instanceId, {
     buttonPin: connectedGpioNumber(activeConnectionGraph, "button-gp15", "input", 15),
   });
   const entry = referenceDeviceUis.find((candidate) => candidate.instanceId === instanceId);
   if (source === null || entry === undefined) {
     return;
   }
-  openEditorTab(t("editor.untitled"), source);
+  if (instanceId !== YM_INSTANCE) {
+    openEditorTab(t("editor.untitled"), source);
+    return;
+  }
+  try {
+    if (!projectWorkspace.loaded) throw new Error(t("draft.unavailable"));
+    if (recover && (runtime.status !== "ready" || filePanel.busy || replRuntimeBusy || !soundPanel.connected)) throw new Error(t("system.waitReady"));
+    // Include the active draft when checking library collisions, before opening another tab.
+    updateActiveEditorTabSource(codeEditor.value);
+    const recovery = recover ? backupYm2203Library(projectWorkspace.files, editorTabs, kind === "score", kind === "tone" || kind === "pocket-signal") : null;
+    const snapshot = recovery?.snapshot ?? prepareYm2203Library(projectWorkspace.files, editorTabs, kind === "score", kind === "tone" || kind === "pocket-signal");
+    const title = kind === "pocket-signal" ? "YM2203 Pocket Signal" : kind === "tone" ? (uiLocale === "ja" ? "YM2203 音色設定サンプル" : "YM2203 patch sample") : kind === "score" ? (uiLocale === "ja" ? "YM2203 合奏サンプル" : "YM2203 ensemble sample") : t("editor.sampleTitle", { device: entry.definition.title });
+    if (!openEditorTab(title, source)) return;
+    if (recovery) editorTabs = [...recovery.tabs, activeEditorTab()];
+    installYmLibraries(snapshot, recover);
+    ymLibraryRecovery.hidden = true;
+    if (recovery) {
+      const message = document.createElement("p");
+      message.textContent = uiLocale === "ja" ? `更新しました。元のファイルと編集内容の保存先: ${recovery.backupPath}/` : `Updated. Original files and drafts: ${recovery.backupPath}/`;
+      ymLibraryRecovery.replaceChildren(message); ymLibraryRecovery.hidden = false;
+    }
+  } catch (error) {
+    projectError(error);
+    if (error instanceof YmLibraryConflict) {
+      // Keep the stored file and draft distinct while offering recovery. A
+      // pending editor autosave must not replace the file we are about to back up.
+      cancelScheduledDraftSave();
+      projectSaveGeneration++;
+      projectPersistence = projectWorkspace.save(editorTabs, activeEditorTabId);
+      void projectPersistence.catch(projectError);
+      const message = document.createElement("p");
+      message.textContent = uiLocale === "ja" ? `${error.paths.join(", ")} が競合しています。元のファイルと未保存の編集内容を ym2203-backups/ に残し、サンプル用のドライバーを更新できます。` : `${error.paths.join(", ")} conflict. Keep original files and unsaved drafts in ym2203-backups/ and update the sample drivers.`;
+      const update = document.createElement("button");
+      update.type = "button"; update.dataset.ymLibraryUpdate = "";
+      update.textContent = uiLocale === "ja" ? "バックアップして更新" : "Back up and update";
+      update.onclick = () => openDeviceExample(instanceId, kind, true);
+      const dismiss = document.createElement("button"); dismiss.type = "button"; dismiss.className = "quiet";
+      dismiss.textContent = uiLocale === "ja" ? "閉じる" : "Close";
+      dismiss.onclick = () => { ymLibraryRecovery.hidden = true; };
+      ymLibraryRecovery.replaceChildren(message, update, dismiss); ymLibraryRecovery.hidden = false;
+    }
+  }
 }
 
 function setDraftStatus(message: string, state: "idle" | "pending" | "saved" | "error"): void {
@@ -1212,6 +1336,13 @@ function getBrowserStorage(): DraftStorage | null {
 
 function handleRuntimeMessage(message: WorkerToMainMessage): void {
   switch (message.type) {
+    case "prototype-audio":
+      try { soundPanel.command(message.command); }
+      catch (error) {
+        appendTerminal(`\n[audio error] ${String(error)}\n`);
+        runtime.stop();
+      }
+      break;
     case "filesystem":
       acceptRuntimeFiles(message.project);
       break;
@@ -1232,12 +1363,14 @@ function handleRuntimeMessage(message: WorkerToMainMessage): void {
       appendTerminal(message.data);
       break;
     case "error":
+      soundPanel.stop();
       appendExperimentOutput(message.message);
       experimentOutputDetails.open = true;
       renderExperiment();
       appendTerminal(`\n[runtime error] ${message.message}\n`);
       break;
     case "execution-result":
+      if (!message.ok) soundPanel.stop();
       if (experiment.running) {
         if (!message.ok && message.error) appendExperimentOutput(message.error);
         experiment.finish(message.ok);
@@ -1469,6 +1602,7 @@ function clearDebuggerWorkspace(): void {
 function updateRuntimeStatus(status: RuntimeStatus): void {
   currentRuntimeStatus = status;
   if (status === "starting" || status === "stopped" || status === "error") {
+    soundPanel.stop();
     experiment.interrupt();
     experimentLed.dataset.on = "false";
     experimentLedState.textContent = t("experiment.ledOff");
@@ -1488,6 +1622,15 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
 
   sendButton.disabled = status !== "ready";
   const sourceLocked = status === "executing" || status === "debugging" || filePanel.busy || replRuntimeBusy;
+  const soundRestartable = (status === "stopped" || status === "error") && !filePanel.busy && !replRuntimeBusy;
+  const soundUnavailableReason = !soundPanel.connected
+    ? (uiLocale === "ja" ? "音源を接続してください。" : "Connect the sound module.")
+    : soundRestartable
+      ? (uiLocale === "ja" ? "実行環境が停止しています。「実行環境を再起動」で復旧できます。" : "The runtime is stopped. Restart the runtime to recover.")
+      : status === "starting"
+        ? (uiLocale === "ja" ? "実行環境の起動を待っています。" : "Waiting for the runtime to start.")
+        : (uiLocale === "ja" ? "コード実行・REPL・ファイル操作の完了を待っています。" : "Waiting for code, REPL or file operations to finish.");
+  soundPatchEditor.setAvailable(status === "ready" && !sourceLocked && soundPanel.connected, soundUnavailableReason, soundRestartable && soundPanel.connected, status === "executing" && soundPreviewActive);
   openExperimentButton.disabled = sourceLocked;
   codeEditor.readOnly = sourceLocked;
   renderEditorTabs();

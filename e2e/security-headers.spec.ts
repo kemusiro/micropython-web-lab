@@ -23,4 +23,12 @@ test("serves the production app with the restricted security policy", async ({ p
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
   await expect(page.locator("#terminal")).toContainText(">>>");
+  const link = page.locator('footer a[href="./distribution-LICENSES.txt"]');
+  await expect(link).toHaveText("ライセンス・出典");
+  const licenses = await page.request.get("/distribution-LICENSES.txt");
+  expect(licenses.status()).toBe(200);
+  const content = await licenses.text();
+  for (const required of ["Damien P. George", "Aaron Giles", "Pocket Signal", "CC0", "Vite", "Emscripten", "Permission is hereby granted"]) {
+    expect(content).toContain(required);
+  }
 });

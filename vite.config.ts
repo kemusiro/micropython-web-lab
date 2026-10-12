@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 
 import { defineConfig, type Plugin } from "vite";
 
@@ -24,12 +25,16 @@ export default defineConfig(async ({ command }) => {
   const localNames = localWorkspace?.instances.map((instance) => instance.name) ?? [];
   const localIds = localWorkspace?.instances.map((instance) => instance.deviceId) ?? [];
   return {
+    build: {
+      rollupOptions: { input: { main: path.resolve("index.html"), fmPrototype: path.resolve("fm-prototype.html") } },
+    },
     define: {
       __WEB_LAB_LOCAL_MODE__: JSON.stringify(localWorkspace !== null),
       __WEB_LAB_LOCAL_DEVICE_ID__: JSON.stringify(localIds.join(", ")),
       __WEB_LAB_LOCAL_DEVICE_NAME__: JSON.stringify(localNames.join(", ")),
     },
     plugins: [
+      distributionNoticesPlugin(),
       localDevicePlugin(localWorkspace),
       optionalContentPlugin(optionalContentEntrypoint),
     ],
@@ -54,6 +59,34 @@ export default defineConfig(async ({ command }) => {
     },
   };
 });
+
+function distributionNoticesPlugin(): Plugin {
+  const notices = async (): Promise<string> => {
+    const files = [
+      "THIRD_PARTY_NOTICES.md", "LICENSE", "runtime/micropython/LICENSE",
+      "runtime/emscripten/LICENSE", "node_modules/vite/LICENSE.md",
+      "runtime/ymfm/LICENSE", "public/pocket-signal-LICENSE.txt",
+    ];
+    const sections = await Promise.all(files.map(async file =>
+      `===== ${file} =====\n\n${await readFile(new URL(file, import.meta.url), "utf8")}`));
+    return sections.join("\n\n");
+  };
+  return {
+    name: "micropython-web-lab-distribution-notices",
+    async generateBundle() {
+      this.emitFile({ type: "asset", fileName: "distribution-LICENSES.txt", source: await notices() });
+    },
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        if (request.url?.split("?")[0] !== "/distribution-LICENSES.txt") return next();
+        try {
+          response.setHeader("Content-Type", "text/plain; charset=utf-8");
+          response.end(await notices());
+        } catch (error) { next(error); }
+      });
+    },
+  };
+}
 
 function optionalContentPlugin(entrypoint: string | undefined): Plugin {
   return {

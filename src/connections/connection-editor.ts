@@ -21,6 +21,8 @@ export interface ConnectionEditorApplyResult {
 
 export interface ConnectionEditorOptions {
   readonly defaultGraph: ConnectionGraphV1;
+  /** Optional devices may appear in the catalog without becoming default connections. */
+  readonly catalogGraph?: ConnectionGraphV1;
   readonly initialGraph: ConnectionGraphV1;
   readonly board: BoardProfile;
   readonly deviceNames: ReadonlyMap<string, string>;
@@ -89,7 +91,7 @@ export class ConnectionEditor {
     return validateConnectionGraph({
       schemaVersion: 1,
       boardProfile: this.#options.defaultGraph.boardProfile,
-      devices: this.#options.defaultGraph.devices.flatMap((device) => {
+      devices: (this.#options.catalogGraph ?? this.#options.defaultGraph).devices.flatMap((device) => {
         const editable = this.#devices.get(device.instanceId);
         if (editable === undefined || !editable.connected) {
           return [];
@@ -102,7 +104,7 @@ export class ConnectionEditor {
   #resetState(initialGraph: ConnectionGraphV1): void {
     this.#devices.clear();
     const initialDevices = new Map(initialGraph.devices.map((device) => [device.instanceId, device]));
-    for (const definition of this.#options.defaultGraph.devices) {
+    for (const definition of (this.#options.catalogGraph ?? this.#options.defaultGraph).devices) {
       const current = initialDevices.get(definition.instanceId);
       this.#devices.set(definition.instanceId, {
         definition,
@@ -207,7 +209,7 @@ export class ConnectionEditor {
     const boardNode = this.#createBoardNode();
     const deviceColumn = document.createElement("div");
     deviceColumn.className = "connection-device-column";
-    for (const device of this.#options.defaultGraph.devices) {
+    for (const device of (this.#options.catalogGraph ?? this.#options.defaultGraph).devices) {
       deviceColumn.append(
         this.#createDeviceNode(this.#devices.get(device.instanceId)!, affectedConnections),
       );

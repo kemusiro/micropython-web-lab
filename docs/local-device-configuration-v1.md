@@ -277,7 +277,8 @@ Device API v1の状態診断を提供し、任意HTML・CSS・Canvas・イベン
 - Viteのfilesystem allowlistは検証済みsource directoryだけへ広げる。
 - 通常の`pnpm build`ではローカル仮想モジュールを空にし、ローカルID、パス、コードの混入を検査する。
 - 管理版オリジンはこの構成を読み込まず、ブラウザから任意パスやURLを指定できない。
-- Device State、転送量、instance数、Worker実行時間、出力量の既存上限を維持する。
+- Device State、転送量、instance数、出力量の既存上限を維持する。Worker実行時間は
+  [ADR 0045](adr/0045-disable-the-default-execution-deadline-for-alpha.md)に従い、アルファ版では既定で無制限とする。
 
 `web-lab.local.json`は秘密情報を持つ形式ではない。トークン、認証情報、ネットワーク接続先、環境変数展開を
 追加しない。共有する場合は相対pathとexpected ID・版だけを用いる。

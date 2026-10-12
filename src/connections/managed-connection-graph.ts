@@ -1,4 +1,5 @@
 import { validateConnectionGraph } from "./connection-model.ts";
+import { YM_PROTOTYPE_GRAPH } from "../devices/ym2203-prototype.ts";
 
 export const MANAGED_CONNECTION_GRAPH = validateConnectionGraph({
   schemaVersion: 1,
@@ -80,4 +81,10 @@ export const MANAGED_CONNECTION_GRAPH = validateConnectionGraph({
       ],
     },
   ],
+});
+
+/** The experimental sound module is available for explicit connection only. */
+export const MANAGED_DEVICE_CATALOG_GRAPH = validateConnectionGraph({
+  ...MANAGED_CONNECTION_GRAPH,
+  devices: [...MANAGED_CONNECTION_GRAPH.devices, ...YM_PROTOTYPE_GRAPH.devices],
 });

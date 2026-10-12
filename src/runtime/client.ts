@@ -12,7 +12,6 @@ import type { ScriptExecutionMode } from "./protocol";
 import type { ConnectionGraphV1 } from "../connections/connection-model";
 import { validateProjectSnapshot, type ProjectSnapshot } from "../project/filesystem";
 
-export const MAX_RUNTIME_EXECUTION_MS = 10_000;
 export { MAX_RUNTIME_OUTPUT_CHARACTERS } from "./output-buffer";
 export const UNEXPECTED_WORKER_RECOVERY_WINDOW_MS = 30_000;
 export const MAX_UNEXPECTED_WORKER_AUTO_RECOVERIES = 1;
@@ -37,6 +36,8 @@ export interface RuntimeWorker {
 export type RuntimeWorkerFactory = () => RuntimeWorker;
 
 export interface RuntimeClientOptions {
+  /** Alpha defaults to no time limit. A positive integer enables the host watchdog. */
+  executionLimitMs?: number | null;
   project?: ProjectSnapshot;
   deviceInputs?: SharedDeviceInputTransfer;
   debuggerChannel?: SharedDebuggerChannel;
@@ -50,6 +51,7 @@ export class RuntimeClient {
   #pendingCheckpoint: Promise<void> | null = null;
   readonly #handlers: RuntimeClientHandlers;
   readonly #workerFactory: RuntimeWorkerFactory;
+  readonly #executionLimitMs: number | null;
   readonly #deviceInputs: SharedDeviceInputTransfer | undefined;
   readonly #debuggerChannel: SharedDebuggerChannel | undefined;
   #connectionGraph: ConnectionGraphV1 | undefined;
@@ -71,6 +73,11 @@ export class RuntimeClient {
     workerFactory: RuntimeWorkerFactory = createRuntimeWorker,
     options: RuntimeClientOptions = {},
   ) {
+    const executionLimitMs = options.executionLimitMs ?? null;
+    if (executionLimitMs !== null && (!Number.isInteger(executionLimitMs) || executionLimitMs < 1 || executionLimitMs > 2_147_483_647)) {
+      throw new RangeError("Execution limit must be null or an integer from 1 to 2147483647 ms.");
+    }
+    this.#executionLimitMs = executionLimitMs;
     this.#handlers = handlers;
     this.#workerFactory = workerFactory;
     this.#deviceInputs = options.deviceInputs;
@@ -340,17 +347,19 @@ export class RuntimeClient {
   }
 
   #resumeOperationTimer(): void {
-    const remaining = MAX_RUNTIME_EXECUTION_MS - this.#operationElapsedMs;
+    const executionLimitMs = this.#executionLimitMs;
+    if (executionLimitMs === null) return;
+    const remaining = executionLimitMs - this.#operationElapsedMs;
     if (remaining <= 0) {
       this.#recoverFromLimit(
-        `実行時間が${MAX_RUNTIME_EXECUTION_MS / 1000}秒の上限を超えたため、Workerを再生成しました。`,
+        `実行時間が${executionLimitMs / 1000}秒の上限を超えたため、Workerを再生成しました。`,
       );
       return;
     }
     this.#operationSegmentStartedAt = Date.now();
     this.#operationTimer = setTimeout(() => {
       this.#recoverFromLimit(
-        `実行時間が${MAX_RUNTIME_EXECUTION_MS / 1000}秒の上限を超えたため、Workerを再生成しました。`,
+        `実行時間が${executionLimitMs / 1000}秒の上限を超えたため、Workerを再生成しました。`,
       );
     }, remaining);
   }

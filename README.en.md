@@ -31,7 +31,7 @@ workspace visible with the existing error message.
 - A multi-tab code editor with normal and debug execution
 - Python keyword, string, and comment highlighting, line numbers, and a highlighted caret line
 - A yellow arrow for the paused debugger line and red dots for breakpoints
-- Stop, reset with Ctrl+D, Worker replacement, and runtime and output limits
+- Stop, reset with Ctrl+D, Worker replacement, and output limits (no execution deadline during alpha)
 - Functional GPIO, ADC, PWM, I2C, SPI, and UART models for the Pico 2 W
 - Virtual-device wiring and sample code
 - Browser-local storage for editor content and connection settings
@@ -80,6 +80,13 @@ The existing saved device order is preserved; card collapse and multiline input 
 
 While paused, use `b 10` in the pdb command field to set a breakpoint on line 10, and `cl 10` to remove it.
 Use `cl` alone to clear every breakpoint. Breakpoints are reset when execution ends or the runtime restarts.
+
+During alpha, scripts, REPL code, and debug runs have no execution deadline. Long computations and input
+waits can continue beyond the former ten-second limit. Stop an infinite loop with **Stop** or Cmd/Ctrl+C
+inside the REPL; use **Restart** after stopping. A silent loop can keep consuming local CPU until stopped.
+The host retains an optional watchdog, while the output, Python heap, and file-size limits remain active.
+YM2203 reservations now support up to about 49.7 days, including native repetition for a 24-hour performance.
+See [ADR 0045 (Japanese)](docs/adr/0045-disable-the-default-execution-deadline-for-alpha.md).
 
 ## Project files and ZIP
 
@@ -216,3 +223,37 @@ in [CHANGELOG.md](CHANGELOG.md) (Japanese).
 This repository is licensed under the MIT License. The bundled MicroPython artifacts and third-party code
 remain subject to their respective licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 (Japanese), the license notices in each directory, and the version metadata for details.
+
+## FM + SSG audio prototype
+
+In the normal workspace, use the connection editor to connect **YM2203 sound module (experimental)**
+and apply the connections. The audio engine prepares automatically and the speaker starts muted.
+Toggle **Mute** on its device card to unmute, open its sample, and run it.
+It uses I2C0 / 0x44, SDA=GP8, SCL=GP9. Connections and code use the normal persistence;
+the speaker starts muted after a reload or reconnection. Disconnecting closes the audio engine.
+Mute affects the speaker output only; it does not stop playback or change the volume slider.
+Opening the sound sample also adds an editable project-local Python driver. It provides three FM presets,
+MIDI notes and rests, immediate notes, and short scheduled melodies. Existing custom driver files are preserved.
+See the [driver guide (Japanese)](docs/devices/ym2203-driver.md).
+The separate **Ensemble sample** schedules melody, accompaniment, and bass across three FM and three SSG channels on one timeline.
+**Patch sample** adds Python control over all four FM operators, algorithm and feedback, plus SSG noise and envelope settings.
+**Patch editor** shows operator connections, lets you audition edited settings, and exports them to a new Python tab.
+The exported tab is unsaved. Use **Save** and choose a path to include it in project files and ZIP exports.
+**Audition mode** offers a short 1.5-second preview or continuous audition that follows setting changes until stopped.
+Closing the editor or moving to a background tab also stops continuous audition. FM envelope decay follows the patch settings.
+**Music sample** opens the complete 12.02-second, three-channel FM version of the public CC0 piece **Pocket Signal**.
+Change `REPEAT_MS = None` to `REPEAT_MS = 24 * 60 * 60 * 1000` for a 24-hour repeat.
+The audio engine reuses a pattern of at most 131,071 events; memory does not grow with playback duration.
+Opening a sample upgrades exact known bundled libraries and restarts the runtime; custom edits remain protected.
+For conflicts, **Back up and update** keeps original files and unsaved drafts in `ym2203-backups/` before updating.
+Its instruments and score are editable, with source and license notices retained in the code.
+See the [adaptation and provenance guide (Japanese)](docs/devices/pocket-signal.md).
+The card distinguishes sent commands, worklet acceptance and audio processing, and shows reservation time, event progress and completion.
+Both `sound.volume(50)` in Python (range 0–100) and **Speaker volume** affect the output. A peak limiter bounds loud ensembles.
+Output is stronger than in the initial prototype; start with a lower setting after updating and adjust it to taste.
+
+Open `/fm-prototype.html`, enable audio, and run the sample to hear an I2C-controlled YM2203 module.
+The sample plays C–D–E–F–G–F–E–D–C using FM alone, then SSG alone, at the same pitch and tempo.
+Python can finish while playback continues. Stop, restart, mute, bounded scheduling, and failure recovery
+are included. This prototype does not persist edits or emulate BUSY, timers, IRQ, CSM, or analog circuitry.
+See [the prototype guide](docs/devices/ym2203-prototype.md) for the I2C contract and rebuild commands.
