@@ -47,6 +47,7 @@ jobs:
         if: matrix.suite == 'firefox'
         env:
           WEB_LAB_FIREFOX_AUTOPLAY: allow
+          WEB_LAB_FIREFOX_AUDIO_OUTPUT: system-clock
         shell: pwsh
         run: |
           pnpm build:sakura
