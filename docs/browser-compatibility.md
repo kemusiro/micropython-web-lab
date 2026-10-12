@@ -141,11 +141,8 @@ PlaywrightのFirefoxとWebKitは、それぞれ製品版FirefoxとSafariの代�
 追加の本番依存パッケージは不要。
 
 Windows CIのFirefoxは使い捨てのheadlessプロファイルで動かす。
-音声出力デバイスを利用できないランナー向けに`WEB_LAB_FIREFOX_AUDIO_OUTPUT=system-clock`を指定し、
-`media.cubeb.force_null_context=true`でハードウェア出力のないWeb Audioグラフを時計駆動する。
-これは[Firefoxのcubeb設定](https://searchfox.org/firefox-main/source/dom/media/CubebUtils.cpp)を使った
-CI専用の条件であり、AudioWorkletやWASM音源を置き換えない。実際のPCM・メトリクスを引き続き検証する。
-`WEB_LAB_FIREFOX_AUTOPLAY=allow`を指定した検証だけ、`media.autoplay.default=0`を設定する。
+`WEB_LAB_FIREFOX_AUTOPLAY=allow`を指定した検証だけ、`media.autoplay.default=0`、
+`media.autoplay.block-webaudio=false`、`media.block-autoplay-until-in-foreground=false`を設定する。
 これは[Firefoxの自動再生許可設定](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay)であり、
 公開アプリや利用者のプロファイル設定は変更しない。指定しない製品版検証はブラウザの既定設定を保持する。
 このCIは初期ミュートと実際のFM／SSG波形・予約完了・停止を検証するが、

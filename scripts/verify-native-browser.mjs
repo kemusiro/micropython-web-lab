@@ -11,10 +11,6 @@ const firefoxAutoplay = process.env.WEB_LAB_FIREFOX_AUTOPLAY;
 if (firefoxAutoplay !== undefined && firefoxAutoplay !== "allow") {
   throw new Error("WEB_LAB_FIREFOX_AUTOPLAY must be allow or unset");
 }
-const firefoxAudioOutput = process.env.WEB_LAB_FIREFOX_AUDIO_OUTPUT;
-if (firefoxAudioOutput !== undefined && firefoxAudioOutput !== "system-clock") {
-  throw new Error("WEB_LAB_FIREFOX_AUDIO_OUTPUT must be system-clock or unset");
-}
 const endpoint = new URL(process.env.WEB_LAB_WEBDRIVER ?? "http://127.0.0.1:4444");
 if (!["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname)) throw new Error("WebDriver must be loopback-only");
 const fixture = await browserFixture(process.env.WEB_LAB_DIST ?? "dist");
@@ -93,12 +89,13 @@ try {
   const capabilities = { browserName: browser };
   if (browser === "firefox") {
     const prefs = { "intl.accept_languages": "ja-JP" };
-    // WebDriver's headless click may leave Web Audio blocked by autoplay.
+    // Headless profiles can block Web Audio or background playback.
     // Opt in only for the disposable CI profile; keep real-user defaults.
-    if (firefoxAutoplay === "allow") prefs["media.autoplay.default"] = 0;
-    // Windows hosted runners may have no usable audio output device. Firefox
-    // can clock its real Web Audio graph without cubeb; PCM checks still run.
-    if (firefoxAudioOutput === "system-clock") prefs["media.cubeb.force_null_context"] = true;
+    if (firefoxAutoplay === "allow") {
+      prefs["media.autoplay.default"] = 0;
+      prefs["media.autoplay.block-webaudio"] = false;
+      prefs["media.block-autoplay-until-in-foreground"] = false;
+    }
     capabilities["moz:firefoxOptions"] = { args: ["-headless"], prefs };
     report.firefoxPreferences = prefs;
   }
@@ -258,6 +255,9 @@ try {
     terminal: document.querySelector("#terminal")?.textContent,
     pressed: document.querySelector('[data-device-component="press"] button')?.dataset.pressed,
     audio: {
+      visibility: document.visibilityState,
+      focused: document.hasFocus(),
+      activated: navigator.userActivation?.hasBeenActive,
       state: document.querySelector(".ym-audio-panel")?.dataset.audioState,
       status: document.querySelector("[data-ym-status]")?.textContent,
       muted: document.querySelector("[data-ym-mute]")?.getAttribute("aria-pressed"),
