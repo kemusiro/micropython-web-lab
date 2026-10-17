@@ -25,6 +25,11 @@ export class FirstExperiment {
 
   get running(): boolean { return this.#source !== null; }
 
+  // Anchor the hint to the successful run so it does not change while editing.
+  get editGuidance(): "starter" | "custom" {
+    return this.#firstSuccessfulSource === FIRST_EXPERIMENT_SOURCE ? "starter" : "custom";
+  }
+
   reset(): void {
     this.stage = "run";
     this.feedback = "idle";

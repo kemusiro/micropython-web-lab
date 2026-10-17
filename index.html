@@ -191,7 +191,7 @@
               </button>
             </div>
           </div>
-          <div class="editor-actions">
+          <div id="editor-actions" class="editor-actions">
             <span data-i18n="editor.limit">アルファ版: 実行時間は無制限・出力100,000文字まで</span>
             <div class="editor-run-actions">
               <button id="experiment-stop-button" class="danger experiment-control" type="button" hidden data-i18n="toolbar.stop">停止</button>
@@ -199,7 +199,7 @@
               <button id="debug-script-button" class="quiet" type="button" disabled data-i18n="editor.debug">
                 デバッグ実行
               </button>
-              <button id="run-script-button" type="submit" disabled data-i18n="editor.run">スクリプトを実行</button>
+              <button id="run-script-button" type="submit" form="script-form" disabled data-i18n="editor.run">スクリプトを実行</button>
             </div>
           </div>
         </form>

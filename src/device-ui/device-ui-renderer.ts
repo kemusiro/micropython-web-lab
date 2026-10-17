@@ -591,6 +591,7 @@ export class DeviceUiRenderer {
       });
       button.addEventListener("pointerup", release);
       button.addEventListener("pointercancel", release);
+      button.addEventListener("blur", release);
       button.addEventListener("keydown", (event) => {
         if ((event.key !== " " && event.key !== "Enter") || event.repeat) {
           return;

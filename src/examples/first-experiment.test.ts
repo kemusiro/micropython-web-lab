@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FirstExperiment } from "./first-experiment";
+import { FIRST_EXPERIMENT_SOURCE, FirstExperiment } from "./first-experiment";
 
 function blink(experiment: FirstExperiment): void {
   experiment.observeLed(false);
@@ -8,6 +8,36 @@ function blink(experiment: FirstExperiment): void {
 }
 
 describe("first experiment progress", () => {
+  it("keeps the starter hint anchored to the first successful run while editing", () => {
+    const experiment = new FirstExperiment();
+    experiment.start(FIRST_EXPERIMENT_SOURCE);
+    blink(experiment);
+    experiment.finish(true);
+    expect(experiment.editGuidance).toBe("starter");
+    experiment.start(FIRST_EXPERIMENT_SOURCE.replace("500", "200"));
+    expect(experiment.editGuidance).toBe("starter");
+    blink(experiment);
+    experiment.finish(true);
+    expect(experiment.stage).toBe("complete");
+  });
+
+  it.each([
+    { name: "retained 200ms interval", source: FIRST_EXPERIMENT_SOURCE.replace("500", "200") },
+    { name: "renamed variable", source: FIRST_EXPERIMENT_SOURCE.replaceAll("interval_ms", "pause_ms") },
+    { name: "interval expression", source: FIRST_EXPERIMENT_SOURCE.replace("500", "100 + 100") },
+  ])("does not assume the starter interval or variable name: $name", ({ source }) => {
+    const experiment = new FirstExperiment();
+    experiment.start(FIRST_EXPERIMENT_SOURCE);
+    blink(experiment);
+    experiment.finish(true);
+    experiment.reset();
+    experiment.start(source);
+    blink(experiment);
+    experiment.finish(true);
+    expect(experiment.stage).toBe("edit");
+    expect(experiment.editGuidance).toBe("custom");
+  });
+
   it("requires a successful blink, then edited code and another successful blink", () => {
     const experiment = new FirstExperiment();
     experiment.start("interval_ms = 500");

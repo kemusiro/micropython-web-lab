@@ -101,6 +101,17 @@ export class ConnectionEditor {
     });
   }
 
+  /** Reflect a connection made by an experiment while retaining other pending edits. */
+  syncAppliedDevice(graph: ConnectionGraphV1, instanceId: string): void {
+    const current = graph.devices.find(device => device.instanceId === instanceId);
+    const editable = this.#devices.get(instanceId);
+    if (editable === undefined || current === undefined) return;
+    this.#appliedGraph = cloneGraph(graph);
+    editable.connected = true;
+    editable.ports = clonePorts(current.ports);
+    this.#render(t("connection.current"));
+  }
+
   #resetState(initialGraph: ConnectionGraphV1): void {
     this.#devices.clear();
     const initialDevices = new Map(initialGraph.devices.map((device) => [device.instanceId, device]));

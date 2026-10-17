@@ -15,15 +15,25 @@ Browsers without saved code open the First experiment screen. Press Run to blink
 then change 500 to 200 in `interval_ms = 500` and run it again. Open workspace to use the device list,
 wiring editor, debugger, and REPL. Stop, error output, and restart remain available in the simple screen. Press Esc, then Tab to leave the editor.
 
-Choose Try a button to open a sample that reads the virtual push button for eight seconds after Run.
-Press and release the button repeatedly; each state change prints `Button: pressed` or `Button: released`
-in Output and REPL. Run the script again to repeat the test.
+Choose Try a button to continue in a focused experiment showing only the push button. Press Run at
+the top; the starter sample reads the button for eight seconds. Press and release it repeatedly to
+change its input level and see `Button: pressed` or `Button: released` in the adjacent live output.
+The output has a fixed height from the moment it appears and scrolls to the latest message whenever new output arrives.
+Completion requires a press followed by a release during a successful execution. Press Run to try
+again. The experiment tab is selected after the workspace finishes restoring. If no button experiment
+tab exists, a fresh sample opens alongside the existing code. Reloading restores the experiment topic
+and edited code. Open workspace to use all devices
+and the REPL. A missing button is connected automatically to GP15, or a free GPIO when GP15 is busy.
+Existing button wiring and other device connections are preserved. Adding the button restarts the
+runtime and saves the wiring. If saving fails, the experiment remains usable for the current session
+and reports the failure. No free GPIO or unavailable synchronous input is explained on screen.
 
-Switching screens preserves code, Python runtime state, and wiring. Your screen choice is saved as an
+Ordinary screen navigation preserves code, Python runtime state, and wiring. Your screen choice is saved as an
 independent browser-local preference. Existing saved projects and local Device development default to
 the full workspace. Reopening First experiment prepares a sample tab without replacing existing code.
-Guide progress restarts on reload while edited code is retained. Invalid saved editor data keeps the
-workspace visible with the existing error message.
+Guide progress restarts on reload while edited code is retained. Running the unchanged starter code
+shows the 500-to-200 instruction; running edited code instead asks you to change its blink interval.
+Invalid saved editor data keeps the workspace visible with the existing error message.
 
 ## Key features
 

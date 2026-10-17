@@ -2,6 +2,24 @@ import type { DraftStorage } from "../project/editor-draft";
 
 export type AppScreen = "experiment" | "workspace";
 export const APP_SCREEN_STORAGE_KEY = "micropython-web-lab:app-screen:v1";
+export type ExperimentTopic = "led" | "button";
+export const EXPERIMENT_TOPIC_STORAGE_KEY = "micropython-web-lab:experiment-topic:v1";
+
+export function loadExperimentTopic(storage: DraftStorage | null): ExperimentTopic {
+  try {
+    return storage?.getItem(EXPERIMENT_TOPIC_STORAGE_KEY) === "button" ? "button" : "led";
+  } catch {
+    return "led";
+  }
+}
+
+export function saveExperimentTopic(storage: DraftStorage | null, topic: ExperimentTopic): void {
+  try {
+    storage?.setItem(EXPERIMENT_TOPIC_STORAGE_KEY, topic);
+  } catch {
+    // Topic selection must still work when browser storage is unavailable.
+  }
+}
 
 /** Presentation preference only; editor and connection schemas remain unchanged. */
 export function loadAppScreen(

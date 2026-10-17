@@ -18,6 +18,7 @@ import {
 } from "./project/connection-project";
 import { RASPBERRY_PI_PICO_2_W_BOARD_PROFILE } from "./board/raspberry-pi-pico-2-w";
 import { ConnectionEditor, type ConnectionEditorApplyResult } from "./connections/connection-editor";
+import { connectExperimentButton } from "./connections/button-experiment-connection";
 import { resolveConnectionGraph, type ConnectionGraphV1 } from "./connections/connection-model";
 import { MANAGED_CONNECTION_GRAPH, MANAGED_DEVICE_CATALOG_GRAPH } from "./connections/managed-connection-graph";
 import { createYm2203PrototypeDefinition } from "./devices/ym2203-prototype";
@@ -39,7 +40,8 @@ import { YM2203_SCORE_EXAMPLE_SOURCE, YM2203_TONE_EXAMPLE_SOURCE } from "./examp
 import { POCKET_SIGNAL_EXAMPLE_SOURCE } from "./examples/pocket-signal";
 import { scenarioExampleSource } from "./examples/scenario-examples";
 import { FIRST_EXPERIMENT_SOURCE, FirstExperiment } from "./examples/first-experiment";
-import { loadAppScreen, saveAppScreen, type AppScreen } from "./layout/app-screen";
+import { ButtonExperiment } from "./examples/button-experiment";
+import { loadAppScreen, saveAppScreen, loadExperimentTopic, saveExperimentTopic, type AppScreen } from "./layout/app-screen";
 import { changeEditorIndentation } from "./editor/indentation";
 import { CodeEditorView } from "./editor/code-editor-view";
 import { RuntimeClient } from "./runtime/client";
@@ -154,6 +156,9 @@ const experimentOutput = requiredElement<HTMLPreElement>("experiment-output");
 const experimentLed = requiredElement<HTMLSpanElement>("experiment-led");
 const experimentLedState = requiredElement<HTMLSpanElement>("experiment-led-state");
 const experimentNext = requiredElement<HTMLDivElement>("experiment-next");
+const experimentButtonExample = requiredElement<HTMLButtonElement>("experiment-button-example");
+const experimentGuide = requiredElement<HTMLElement>("experiment-guide");
+const editorActions = requiredElement<HTMLDivElement>("editor-actions");
 const examplesSection = requiredElement<HTMLElement>("examples-title").closest<HTMLElement>(
   ".examples",
 );
@@ -218,6 +223,9 @@ const lastDeviceSequences = new Map<string, number>();
 const initialScript = FIRST_EXPERIMENT_SOURCE;
 codeEditor.value = initialScript;
 const experiment = new FirstExperiment();
+const buttonExperiment = new ButtonExperiment();
+let experimentTopic = loadExperimentTopic(browserStorage);
+let buttonExperimentTabId: string | null = null;
 let appScreen: AppScreen = "workspace";
 let experimentTabId: string | null = null;
 let currentRuntimeStatus: RuntimeStatus = "stopped";
@@ -337,7 +345,7 @@ soundPanel.onState = state => {
 };
 soundPatchEditor.setAudioState(soundPanel.state);
 
-new ConnectionEditor(connectionEditorRoot, {
+const connectionEditor = new ConnectionEditor(connectionEditorRoot, {
   defaultGraph: localDeviceMetadata?.connectionGraph ?? MANAGED_CONNECTION_GRAPH,
   ...(localDeviceMetadata === null ? { catalogGraph: MANAGED_DEVICE_CATALOG_GRAPH } : {}),
   initialGraph: activeConnectionGraph,
@@ -444,7 +452,6 @@ appScreen = loadAppScreen(browserStorage, {
   storageError: restoredWorkspace === "invalid" || (restoredWorkspace === "unavailable" && browserStorage !== null),
   localMode: __WEB_LAB_LOCAL_MODE__,
 });
-if (appScreen === "experiment") experimentTabId = activeEditorTabId;
 if (!__WEB_LAB_LOCAL_MODE__) saveAppScreen(browserStorage, appScreen);
 renderAppScreen();
 openWorkspaceButton.addEventListener("click", () => showAppScreen("workspace"));
@@ -457,15 +464,34 @@ openExperimentButton.addEventListener("click", () => {
     experimentTabId = activeEditorTabId;
   }
   experiment.reset();
+  experimentTopic = "led";
+  saveExperimentTopic(browserStorage, experimentTopic);
   experimentOutput.textContent = "";
   experimentOutputDetails.hidden = true;
   experimentOutputDetails.open = false;
   showAppScreen("experiment");
 });
 requiredElement<HTMLButtonElement>("experiment-finish-button").addEventListener("click", () => showAppScreen("workspace"));
-requiredElement<HTMLButtonElement>("experiment-button-example").addEventListener("click", () => {
-  showAppScreen("workspace");
-  openDeviceExample("button-gp15");
+experimentButtonExample.addEventListener("click", () => {
+  const graph = prepareButtonExperimentConnection();
+  if (editorTabs.some((tab) => tab.id === buttonExperimentTabId)) {
+    selectEditorTab(buttonExperimentTabId!);
+  } else {
+    const source = deviceExampleSource("button-gp15", {
+      buttonPin: connectedGpioNumber(graph ?? activeConnectionGraph, "button-gp15", "input", 15),
+    });
+    if (source === null || !openEditorTab(t("experiment.button.sampleTitle"), source)) return;
+    buttonExperimentTabId = activeEditorTabId;
+  }
+  experimentTopic = "button";
+  saveExperimentTopic(browserStorage, experimentTopic);
+  buttonExperiment.reset();
+  experimentOutput.textContent = "";
+  experimentOutputDetails.hidden = true;
+  experimentOutputDetails.open = false;
+  if (graph !== null && graph !== activeConnectionGraph) installButtonExperimentConnection(graph, true);
+  showAppScreen("experiment");
+  experimentGuide.scrollIntoView({ block: "start" });
 });
 languageSelect.value = uiLocale;
 languageSelect.addEventListener("change", () => {
@@ -741,14 +767,42 @@ function applyEditedConnectionGraph(graph: ConnectionGraphV1): ConnectionEditorA
   if (!saved.ok) {
     return saved;
   }
+  installConnectionGraph(graph);
+  runtime.restart();
+  return { ok: true, message: t("connection.applied") };
+}
+
+function installConnectionGraph(graph: ConnectionGraphV1): void {
   activeConnectionGraph = graph;
   lastDeviceSequences.clear();
   deviceUiRenderer.replace(deviceUiEntries(graph));
   mountSoundPanel();
   runtime.setConnectionGraph(graph);
   appendTerminal(t("connection.appliedTerminal"));
-  runtime.restart();
-  return { ok: true, message: t("connection.applied") };
+}
+
+function prepareButtonExperimentConnection(): ConnectionGraphV1 | null {
+  if (localDeviceMetadata !== null) return activeConnectionGraph;
+  // A retained sample may already use a GPIO chosen during an earlier experiment.
+  const source = editorTabs.find(tab => tab.id === buttonExperimentTabId)?.source ?? "";
+  const pin = /^button = Pin\((\d+), Pin.IN, Pin.PULL_UP\)/m.exec(source)?.[1];
+  return connectExperimentButton(activeConnectionGraph, RASPBERRY_PI_PICO_2_W_BOARD_PROFILE,
+    managedDeviceDefinitions, pin === undefined ? "GP15" : `GP${pin}`);
+}
+
+function installButtonExperimentConnection(graph: ConnectionGraphV1, restart: boolean): void {
+  const saved = draftStorage === null
+    ? { ok: false, message: t("connection.saveUnavailable") }
+    : saveConnectionProject(draftStorage, graph);
+  installConnectionGraph(graph);
+  connectionEditor.syncAppliedDevice(graph, "button-gp15");
+  if (!saved.ok) {
+    // The experiment remains usable for this session when browser storage is blocked.
+    appendTerminal(`\n${saved.message}\n`);
+    appendExperimentOutput(`${saved.message}\n`);
+    setDraftStatus(saved.message, "error");
+  }
+  if (restart) runtime.restart();
 }
 
 function sendCurrentInput(): void {
@@ -818,13 +872,15 @@ function forceKeyboardInterrupt(): void {
 
 function runCurrentScript(mode: ScriptExecutionMode): void {
   if (filePanel.busy || replRuntimeBusy || runtime.status !== "ready") return;
+  if (appScreen === "experiment" && experimentTopic === "button" && !buttonExperimentAvailable()) return;
   soundPreviewActive = false;
   cancelScheduledDraftSave();
   const source = codeEditor.value;
   if (source.trim().length === 0) {
     appendTerminal(t("system.enterCode"));
     if (appScreen === "experiment") {
-      experiment.feedback = "error";
+      if (experimentTopic === "button") buttonExperiment.feedback = "error";
+      else experiment.feedback = "error";
       appendExperimentOutput(t("experiment.enterCode"));
       experimentOutputDetails.open = true;
       renderExperiment();
@@ -852,7 +908,8 @@ function runCurrentScript(mode: ScriptExecutionMode): void {
 
   optionalContentIntegration.executionStarted(source, mode);
   if (appScreen === "experiment" && mode === "run") {
-    experiment.start(source);
+    if (experimentTopic === "button") buttonExperiment.start();
+    else experiment.start(source);
     experimentOutput.textContent = "";
     experimentOutputDetails.hidden = true;
     experimentOutputDetails.open = false;
@@ -870,11 +927,15 @@ function showAppScreen(screen: AppScreen): void {
   if (screen === "experiment") workspaceViews.reset();
   renderAppScreen();
   // The navigation control being activated becomes hidden in the new screen.
-  (screen === "experiment" ? codeEditor : restartButton).focus({ preventScroll: true });
+  (screen === "experiment" ? experimentTopic === "button" ? runScriptButton : codeEditor : restartButton).focus({ preventScroll: true });
 }
 
 function renderAppScreen(): void {
   document.body.dataset.appScreen = appScreen;
+  document.body.dataset.experimentTopic = experimentTopic;
+  // Keep the shared Run/Stop controls above the button and its live output.
+  const buttonScreen = appScreen === "experiment" && experimentTopic === "button";
+  (buttonScreen ? experimentGuide : scriptForm).append(editorActions);
   openExperimentButton.hidden = appScreen === "experiment" || __WEB_LAB_LOCAL_MODE__;
   openWorkspaceButton.hidden = appScreen === "workspace";
   runScriptButton.textContent = t(appScreen === "experiment" ? "experiment.run" : "editor.run");
@@ -882,33 +943,49 @@ function renderAppScreen(): void {
 }
 
 function renderExperiment(): void {
+  const buttonTopic = experimentTopic === "button";
   const stage = experiment.stage;
   const suffix = ({ run: "Run", edit: "Edit", complete: "Complete" } as const)[stage];
-  experimentStep.textContent = t(`experiment.step${suffix}`);
-  experimentTitle.textContent = t(`experiment.title${suffix}`);
-  experimentInstruction.textContent = t(`experiment.instruction${suffix}`);
+  const guidanceSuffix = stage === "edit" && experiment.editGuidance === "custom" ? "EditCustom" : suffix;
+  experimentStep.textContent = t(buttonTopic ? "experiment.button.step" : `experiment.step${suffix}`);
+  experimentTitle.textContent = t(buttonTopic ? "experiment.button.title" : `experiment.title${guidanceSuffix}`);
+  experimentInstruction.textContent = buttonTopic
+    ? t("experiment.button.instruction", { pin: `GP${connectedGpioNumber(activeConnectionGraph, "button-gp15", "input", 15)}` })
+    : t(`experiment.instruction${guidanceSuffix}`);
   experimentFeedback.textContent = currentRuntimeStatus === "starting"
     ? t("experiment.feedback.starting")
     : currentRuntimeStatus === "error"
       ? t("experiment.feedback.unavailable")
       : currentRuntimeStatus === "stopped"
         ? t("experiment.feedback.stopped")
-        : t(`experiment.feedback.${experiment.feedback}`);
+        : buttonTopic && !buttonExperimentAvailable()
+          ? t(sharedDeviceInputs === null ? "device.inputUnavailable" : "experiment.button.disconnected")
+          : buttonTopic ? t(`experiment.button.feedback.${buttonExperiment.feedback}`) : t(`experiment.feedback.${experiment.feedback}`);
   const inExperiment = appScreen === "experiment";
+  runScriptButton.disabled = currentRuntimeStatus !== "ready" || filePanel.busy || replRuntimeBusy ||
+    (inExperiment && buttonTopic && !buttonExperimentAvailable());
   experimentStopButton.hidden = !inExperiment || currentRuntimeStatus !== "executing";
   experimentRestartButton.hidden = !inExperiment || (currentRuntimeStatus !== "stopped" && currentRuntimeStatus !== "error");
   if (document.activeElement === experimentStopButton && experimentStopButton.hidden) {
     (experimentRestartButton.hidden ? runScriptButton : experimentRestartButton).focus({ preventScroll: true });
   }
-  experimentNext.hidden = stage !== "complete";
+  experimentNext.hidden = buttonTopic ? buttonExperiment.feedback !== "complete" : stage !== "complete";
+  experimentButtonExample.hidden = buttonTopic;
   for (const button of experimentNext.querySelectorAll<HTMLButtonElement>("button")) {
     button.disabled = currentRuntimeStatus !== "ready";
   }
 }
 
+function buttonExperimentAvailable(): boolean {
+  return sharedDeviceInputs !== null && activeConnectionGraph.devices.some(device =>
+    device.instanceId === "button-gp15" && device.ports.some(port => port.portId === "input" && port.endpoint.kind === "gpio"));
+}
+
 function appendExperimentOutput(data: string): void {
   experimentOutput.textContent = ((experimentOutput.textContent ?? "") + data).slice(-MAX_EXPERIMENT_OUTPUT_CHARACTERS);
   experimentOutputDetails.hidden = false;
+  if (experimentTopic === "button") experimentOutputDetails.open = true;
+  experimentOutput.scrollTop = experimentOutput.scrollHeight;
 }
 
 function restoreEditorWorkspace(): "empty" | "loaded" | "invalid" | "unavailable" {
@@ -977,16 +1054,56 @@ async function initializeProject(): Promise<void> {
     codeEditor.value = activeEditorTab().source;
     renderEditorTabs();
     runtime.setProject(projectWorkspace.files.snapshot());
-    await projectWorkspace.save(editorTabs, activeEditorTabId);
-    updateEditorTabSaveIndicators();
     if (projectWorkspace.restored && !originalScreenPreference && !__WEB_LAB_LOCAL_MODE__) {
       appScreen = "workspace"; experimentTabId = null;
       saveAppScreen(browserStorage, appScreen); renderAppScreen();
     }
     if (projectWorkspace.restored) setDraftStatus(t("draft.restored", { time: formatSavedAt(new Date().toISOString()) }), "saved");
   } catch (error) { projectError(error); }
+  restoreExperimentEditor();
+  if (projectWorkspace.loaded) {
+    try {
+      await projectWorkspace.save(editorTabs, activeEditorTabId);
+      updateEditorTabSaveIndicators();
+    } catch (error) { projectError(error); }
+  }
   filePanel.render();
+  if (appScreen === "experiment" && experimentTopic === "button") {
+    const graph = prepareButtonExperimentConnection();
+    if (graph !== null && graph !== activeConnectionGraph) installButtonExperimentConnection(graph, false);
+  }
   runtime.start();
+}
+
+function restoreExperimentEditor(): void {
+  if (appScreen !== "experiment") return;
+  // IndexedDB may replace both the exit journal's tabs and its active tab.
+  // Bind experiment tabs only after that authoritative workspace is restored.
+  if (experimentTopic === "led") {
+    experimentTabId = activeEditorTabId;
+    return;
+  }
+  // The screen preference alone does not make arbitrary workspace code a button sample.
+  // Accept both titles so language changes also retain an edited experiment.
+  const tab = [activeEditorTab(), ...editorTabs].find(candidate =>
+    candidate.title === "ボタンの実験" || candidate.title === "Button experiment");
+  if (tab !== undefined) {
+    buttonExperimentTabId = tab.id;
+    activeEditorTabId = tab.id;
+    codeEditor.value = tab.source;
+    renderEditorTabs();
+    return;
+  }
+  const graph = prepareButtonExperimentConnection();
+  const source = deviceExampleSource("button-gp15", {
+    buttonPin: connectedGpioNumber(graph ?? activeConnectionGraph, "button-gp15", "input", 15),
+  });
+  if (source !== null && createEditorTab(t("experiment.button.sampleTitle"), source)) {
+    buttonExperimentTabId = activeEditorTabId;
+  } else {
+    // A full tab list must not leave an unrelated program under the experiment's Run button.
+    showAppScreen("workspace");
+  }
 }
 
 function persistProject(): Promise<void> {
@@ -1201,6 +1318,11 @@ function openEditorTab(title: string, source: string): boolean {
   if (codeEditor.readOnly) {
     return false;
   }
+  return createEditorTab(title, source);
+}
+
+/** Also used while restoring the project, before editing is enabled. */
+function createEditorTab(title: string, source: string): boolean {
   if (editorTabs.length >= MAX_EDITOR_TABS) {
     setDraftStatus(t("editor.tabLimit", { count: MAX_EDITOR_TABS }), "error");
     return false;
@@ -1356,12 +1478,12 @@ function handleRuntimeMessage(message: WorkerToMainMessage): void {
       appendTerminal(t("system.softReset"));
       break;
     case "stdout":
-      if (experiment.running) appendExperimentOutput(message.data);
+      if (experiment.running || buttonExperiment.running) appendExperimentOutput(message.data);
       optionalContentIntegration.stdout(message.data);
       appendTerminal(message.data);
       break;
     case "stderr":
-      if (experiment.running) appendExperimentOutput(message.data);
+      if (experiment.running || buttonExperiment.running) appendExperimentOutput(message.data);
       appendTerminal(message.data);
       break;
     case "error":
@@ -1373,6 +1495,11 @@ function handleRuntimeMessage(message: WorkerToMainMessage): void {
       break;
     case "execution-result":
       if (!message.ok) soundPanel.stop();
+      if (buttonExperiment.running) {
+        if (!message.ok && message.error) appendExperimentOutput(message.error);
+        buttonExperiment.finish(message.ok);
+        renderExperiment();
+      }
       if (experiment.running) {
         if (!message.ok && message.error) appendExperimentOutput(message.error);
         experiment.finish(message.ok);
@@ -1400,6 +1527,10 @@ function handleRuntimeMessage(message: WorkerToMainMessage): void {
       break;
     case "device-model-state":
       deviceUiRenderer.update(message.event);
+      if (message.event.instanceId === "button-gp15" && typeof message.event.state.pressed === "boolean") {
+        buttonExperiment.observe(message.event.state.pressed, message.event.sequence);
+        if (appScreen === "experiment" && experimentTopic === "button") renderExperiment();
+      }
       break;
   }
 }
@@ -1606,6 +1737,7 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   if (status === "starting" || status === "stopped" || status === "error") {
     soundPanel.stop();
     experiment.interrupt();
+    buttonExperiment.interrupt();
     experimentLed.dataset.on = "false";
     experimentLedState.textContent = t("experiment.ledOff");
     replExecutionPending = false;
@@ -1662,7 +1794,6 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
     debuggerCommandInput.value = "";
   }
   sendButton.disabled = status !== "ready" || filePanel.busy;
-  runScriptButton.disabled = status !== "ready" || filePanel.busy || replRuntimeBusy;
   debugScriptButton.disabled = status !== "ready" || sharedDebuggerChannel === null || filePanel.busy || replRuntimeBusy;
   debugScriptButton.title =
     sharedDebuggerChannel === null

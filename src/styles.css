@@ -1849,3 +1849,53 @@ body[data-app-screen="workspace"] h1 { font-size: 1.8rem; }
 .project-save-actions { display: flex; justify-content: flex-end; gap: .5rem; }
 .project-save-error { margin: 0; font-size: .8rem; color: #efaaa4; overflow-wrap: anywhere; }
 .project-save-error[hidden] { display: none; }
+
+/* Continue the guided flow using the existing connected button and its controls. */
+.experiment-next button[hidden] { display: none; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] .workspace {
+  grid-template-areas: "guide guide" "editor preview" "editor result";
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 35%);
+  grid-template-rows: auto auto 1fr;
+}
+body[data-app-screen="experiment"][data-experiment-topic="button"] .experiment-preview { display: none; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] .editor-panel {
+  grid-template-areas: "heading" "code" "draft";
+  grid-template-columns: minmax(0, 1fr);
+}
+body[data-app-screen="experiment"][data-experiment-topic="button"] .experiment-guide .editor-actions {
+  margin-top: .85rem;
+  justify-content: flex-start;
+}
+body[data-app-screen="experiment"] .experiment-guide :is(.editor-actions > span, #debug-script-button) { display: none; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] .virtual-board-panel {
+  display: block;
+  grid-area: preview;
+  min-width: 0;
+  overflow: visible;
+  padding: 1rem 1.5rem .75rem;
+  border: 0;
+  background: transparent;
+}
+body[data-app-screen="experiment"][data-experiment-topic="button"] :is(.virtual-board-heading, .device-ui-reorder-status, .device-ui-card:not([data-device-instance="button-gp15"])) { display: none; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] .device-ui-grid {
+  display: block;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+}
+body[data-app-screen="experiment"][data-experiment-topic="button"] .device-ui-card { height: auto; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] :is(.device-ui-card-heading-actions, .device-ui-description) { display: none; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] .device-ui-card-heading { cursor: default; pointer-events: none; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] .device-ui-components[hidden] { display: grid; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] .device-ui-action-status[hidden] { display: block; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] .experiment-result { padding-top: .75rem; }
+body[data-app-screen="experiment"][data-experiment-topic="button"] #experiment-output { height: 8rem; max-height: 8rem; }
+@media (max-width: 600px) {
+  body[data-app-screen="experiment"][data-experiment-topic="button"] .workspace {
+    grid-template-areas: "guide" "preview" "result" "editor";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+  }
+  body[data-app-screen="experiment"][data-experiment-topic="button"] .virtual-board-panel { padding: .5rem 1rem; }
+}
