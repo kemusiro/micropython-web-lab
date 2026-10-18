@@ -1,31 +1,15 @@
 import { snapshotStoredProject, type ProjectPersistence, type StoredProject } from "./project-state";
+import { getProjectDatabase, ProjectDatabase, projectTransaction } from "./database";
 export type { StoredProject } from "./project-state";
 
 /** One transaction commits the complete filesystem and editor workspace together. */
 export class ProjectStore implements ProjectPersistence {
-  #database: Promise<IDBDatabase>;
   #active: Promise<void> = Promise.resolve();
   #pending: StoredProject | null = null;
   #running = false;
-  constructor() {
-    this.#database = new Promise((resolve, reject) => {
-      const request = indexedDB.open("micropython-web-lab-project", 1);
-      request.onupgradeneeded = () => request.result.createObjectStore("project");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(new Error("Project database is blocked by another tab"));
-    });
-    // Report failures through load/save without an unhandled rejection during startup.
-    void this.#database.catch(() => {});
-  }
+  constructor(readonly database: ProjectDatabase = getProjectDatabase()) {}
   async load(): Promise<StoredProject | undefined> {
-    const db = await this.#database;
-    const value = await new Promise<unknown>((resolve, reject) => {
-      const request = db.transaction("project").objectStore("project").get("current");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    return value === undefined ? undefined : snapshotStoredProject(value);
+    return this.#legacyTransaction("readonly", (value) => value === undefined ? undefined : snapshotStoredProject(value));
   }
   save(value: StoredProject): Promise<void> {
     // Coalesce frequent Python writes: at most one active and one pending snapshot.
@@ -37,17 +21,18 @@ export class ProjectStore implements ProjectPersistence {
     return this.#active;
   }
   async #drain(): Promise<void> {
-    const db = await this.#database;
     while (this.#pending) {
       const next = this.#pending;
       this.#pending = null;
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction("project", "readwrite");
-        tx.objectStore("project").put(next, "current");
-        tx.oncomplete = () => resolve();
-        tx.onabort = () => reject(tx.error ?? new Error("Project save aborted"));
-        tx.onerror = () => reject(tx.error);
-      });
+      await this.#legacyTransaction("readwrite", (_value, tx) => { tx.objectStore("project").put(next, "current"); });
     }
+  }
+  #legacyTransaction<T>(mode: IDBTransactionMode, apply: (value: unknown, tx: IDBTransaction) => T): Promise<T> {
+    return projectTransaction(this.database, ["project", "experimentWorkspace"], mode,
+      tx => [tx.objectStore("project").get("current"), tx.objectStore("experimentWorkspace").get("current")],
+      ([value, workspace], tx) => {
+        if (workspace !== undefined) throw new Error("Experiment workspace is active; legacy writes are disabled / 実験セット対応画面で開いてください");
+        return apply(value, tx);
+      });
   }
 }

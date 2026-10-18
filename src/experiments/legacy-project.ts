@@ -14,11 +14,15 @@ export interface LegacyBoardExperiment {
 /** Capture only project data and the applied graph, without reading or writing storage. */
 export function captureLegacyBoardExperiment(project: unknown, connectionGraph: unknown): LegacyBoardExperiment {
   const captured = snapshotStoredProject(project);
+  return { project: captured, environment: { kind: "board", connectionGraph: snapshotBoardGraph(connectionGraph) } };
+}
+
+export function snapshotBoardGraph(connectionGraph: unknown): ConnectionGraphV1 {
   const graph = validateConnectionGraph(connectionGraph);
   // Include the existing envelope when enforcing the legacy 64 KiB budget.
   const envelope = { schemaVersion: 1, savedAt: new Date(0).toISOString(), graph };
   if (new TextEncoder().encode(JSON.stringify(envelope)).byteLength > MAX_CONNECTION_PROJECT_BYTES) {
     throw new Error("Connection project exceeds 64 KiB");
   }
-  return { project: captured, environment: { kind: "board", connectionGraph: graph } };
+  return graph;
 }

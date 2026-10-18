@@ -236,7 +236,12 @@ Node.jsとpnpmはプロジェクトで固定した版を使用します。グロ
 ./scripts/use-node.sh pnpm test
 ./scripts/use-node.sh pnpm build
 ./scripts/use-node.sh pnpm test:e2e
+./scripts/use-node.sh pnpm test:e2e:experiments
 ```
+
+`test:e2e:experiments`は開発用ページと実際のIndexedDBで、実験セットの保存・移行・切替を
+検証します。通常画面への接続前の基盤であり、カテゴリ画面はまだ追加していません。
+保存契約と移行の詳細は[ADR 0051](docs/adr/0051-add-transactional-experiment-set-storage.md)を参照してください。
 
 製品版Chrome・Edge・Firefox・SafariとOS別の確認方法は
 [ブラウザとOSの検証](docs/browser-compatibility.md)を参照してください。

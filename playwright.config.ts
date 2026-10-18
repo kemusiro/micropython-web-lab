@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: ["local-device.spec.ts", "local-devices.spec.ts"],
+  testIgnore: ["local-device.spec.ts", "local-devices.spec.ts", "experiments/**"],
   fullyParallel: false,
   workers: process.env.CI ? 1 : undefined,
   timeout: 30_000,

@@ -138,8 +138,10 @@ IndexedDBへ書き込み中のファイルと、最後に保存できたファ�
 
 実験セットへの拡張に向け、`project-state.ts`の検証・コピー処理を保存と復元で共有し、
 `ProjectWorkspace`は`ProjectPersistence`を介して保存する。現行プロジェクトと適用済み配線を
-まとめる純粋な変換と、その契約テストを用意する。複数セットへの移行は次段階とし、
-現行の保存先と形式を維持する。詳細は[実験セットの基盤](experiment-set-foundation.md)を参照する。
+まとめる純粋な変換と、その契約テストを用意する。通常画面の複数セットへの移行は次段階とし、
+現行レコードは維持する。DB接続は版2の共通管理を使い、セット保存・移行・切替の基盤を
+追加した。通常画面の移行と保存経路の接続はE2で行う。詳細は
+[実験セットの基盤](experiment-set-foundation.md)と[ADR 0051](adr/0051-add-transactional-experiment-set-storage.md)を参照する。
 
 REPLは出力画面モデルと不可視のブラウザ入力要素を分ける。MicroPython側を入力・履歴の正本とし、
 ブラウザは確定した文字と制御キーだけをWorkerへ送る。応答しない実行中の停止は、MicroPythonの協調動作に

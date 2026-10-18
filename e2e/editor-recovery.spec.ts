@@ -80,7 +80,7 @@ test("restores a newer exit journal as drafts without rewriting files or naming 
   await expect(page.getByRole("tab", { name: "main.py", exact: true })).toHaveText("●main.py");
   const storedSource = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("micropython-web-lab-project", 1);
+      const request = indexedDB.open("micropython-web-lab-project");
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });

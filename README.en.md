@@ -192,7 +192,13 @@ You can also run the unit tests, type checking and build, and browser tests sepa
 ./scripts/use-node.sh pnpm test
 ./scripts/use-node.sh pnpm build
 ./scripts/use-node.sh pnpm test:e2e
+./scripts/use-node.sh pnpm test:e2e:experiments
 ```
+
+`test:e2e:experiments` uses a development fixture and real IndexedDB to verify experiment-set storage,
+migration and switching. The normal UI still uses the existing project flow; category screens and UI
+integration follow in E2. See [ADR 0051 (Japanese)](docs/adr/0051-add-transactional-experiment-set-storage.md)
+for the storage contract and migration plan.
 
 See [Browser and OS verification (Japanese)](docs/browser-compatibility.md) for instructions covering the
 release versions of Chrome, Edge, Firefox, and Safari on supported operating systems.
