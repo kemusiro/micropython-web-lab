@@ -53,7 +53,9 @@ import { ButtonExperiment } from "./examples/button-experiment";
 import { loadAppScreen, saveAppScreen, loadExperimentTopic, saveExperimentTopic, type AppScreen } from "./layout/app-screen";
 import { changeEditorIndentation } from "./editor/indentation";
 import { CodeEditorView } from "./editor/code-editor-view";
-import { RuntimeClient } from "./runtime/client";
+import { WorkspaceRuntime } from "./experiments/workspace-runtime";
+import { ArmExperimentView } from "./control/arm-view";
+import { ARM_CONTROL_SOURCE } from "./control/python-module";
 import {
   applyDocumentTranslations,
   isSupportedLocale,
@@ -329,17 +331,29 @@ deviceUiInputStatus.textContent =
     : managedExperiments ? (uiLocale === "ja" ? "接続したデバイスの入力を、実行中にも操作できます。" : "Connected device inputs remain interactive during execution.") : t("device.inputAvailable");
 deviceUiInputStatus.dataset.state = sharedDeviceInputs === null ? "unavailable" : "available";
 
-const runtime = new RuntimeClient(
+const armView = new ArmExperimentView(requiredElement<HTMLElement>("arm-workbench"), uiLocale, (conditions) => {
+  if (!runtime.isModel || experimentLocked || experimentReadOnly) return;
+  if (runtime.status !== "starting" && runtime.status !== "executing") runtime.setConditions(conditions);
+  scheduleDraftSave();
+});
+const runtime = new WorkspaceRuntime(
   {
     onMessage: handleRuntimeMessage,
     onStatus: updateRuntimeStatus,
     onCheckpoint: () => projectPersistence,
+    onArmFrame: (frame, lag) => armView.frame(frame, lag),
+    onArmResult: result => {
+      armView.complete(result);
+      optionalContentIntegration.executionFinished(result.status === "completed");
+      if (result.status === "completed") appendTerminal(t("system.runComplete"));
+      else if (result.status === "failed") appendTerminal(`\n[script error] ${result.reason ?? t("system.unknownError")}\n`);
+      else appendTerminal(uiLocale === "ja" ? "\n[arm] 実験を途中で停止しました。\n" : "\n[arm] Experiment stopped before completion.\n");
+    },
     onReplBusy: (busy) => {
       replRuntimeBusy = busy;
       updateRuntimeStatus(runtime.status);
     },
   },
-  undefined,
   {
     deviceInputs: sharedDeviceInputs?.toTransfer(),
     debuggerChannel: sharedDebuggerChannel ?? undefined,
@@ -397,6 +411,7 @@ if (managedExperiments) {
     },
     section: section => { observationSection = section; if (experimentCoordinator && !experimentLocked && !experimentReadOnly) scheduleDraftSave(); },
     configure: () => showDeviceConfiguration(true),
+    present: (record, section, visible) => armView.section(section, visible && record?.environment.kind === "model"),
     backup: downloadExperimentRecovery,
     retry: async () => {
       await backupEditorDrafts();
@@ -569,6 +584,7 @@ codeEditor.addEventListener("input", () => {
   updateEditorTabSaveIndicators();
   scheduleDraftSave();
   optionalContentIntegration.editorChanged(codeEditor.value);
+  if (runtime.isModel) armView.context(codeEditor.value, projectWorkspace.files.snapshot());
 });
 codeEditor.addEventListener("scroll", updateDebuggerLineMarker);
 codeEditor.addEventListener("keydown", (event) => {
@@ -631,9 +647,11 @@ resetDraftButton.addEventListener("click", () => {
     return;
   }
 
-  editorTabs = [{ id: "main", title: "main.py", source: initialScript }];
+  const source = runtime.isModel ? ARM_CONTROL_SOURCE : initialScript;
+  editorTabs = [{ id: "main", title: "main.py", source }];
   activeEditorTabId = "main";
-  codeEditor.value = initialScript;
+  codeEditor.value = source;
+  if (runtime.isModel) armView.context(source, projectWorkspace.files.snapshot());
   renderEditorTabs();
   optionalContentIntegration.editorChanged(codeEditor.value);
   setDraftStatus(t("draft.initial"), "idle");
@@ -642,6 +660,7 @@ resetDraftButton.addEventListener("click", () => {
 });
 
 window.addEventListener("pagehide", () => {
+  if (runtime.isModel) runtime.stop();
   soundPatchEditor.close();
   void soundPanel.close();
   if (managedExperiments) {
@@ -723,6 +742,7 @@ const configurationScreen = requiredElement<HTMLElement>("device-configuration-s
 const openConfigurationButton = requiredElement<HTMLButtonElement>("open-device-configuration");
 const closeConfigurationButton = requiredElement<HTMLButtonElement>("close-device-configuration");
 function showDeviceConfiguration(open: boolean): void {
+  if (open && runtime.isModel) { experimentPane?.show("work"); return; }
   workspace.dataset.deviceConfiguration = String(open);
   configurationScreen.hidden = !open;
   (open ? closeConfigurationButton : openConfigurationButton).focus({ preventScroll: true });
@@ -825,6 +845,7 @@ function validateEditedConnectionGraph(graph: ConnectionGraphV1): string | null 
 }
 
 async function applyEditedConnectionGraph(graph: ConnectionGraphV1): Promise<ConnectionEditorApplyResult> {
+  if (runtime.isModel) return { ok: false, message: uiLocale === "ja" ? "この実験はボード配線を使いません。" : "This experiment has no board wiring." };
   const validationError = validateEditedConnectionGraph(graph);
   if (validationError !== null) {
     return { ok: false, message: validationError };
@@ -967,8 +988,10 @@ function forceKeyboardInterrupt(): void {
 }
 
 function runCurrentScript(mode: ScriptExecutionMode): void {
+  if (runtime.isModel && mode !== "run") return;
   if (experimentLocked || experimentReadOnly || configurationBusy || experimentOpening) return;
   if (filePanel.busy || replRuntimeBusy || runtime.status !== "ready") return;
+  if (runtime.isModel) { try { armView.validateConditions(); } catch (error) { projectError(error); return; } }
   if (appScreen === "experiment" && experimentTopic === "button" && !buttonExperimentAvailable()) return;
   soundPreviewActive = false;
   cancelScheduledDraftSave();
@@ -997,6 +1020,7 @@ function runCurrentScript(mode: ScriptExecutionMode): void {
       void persistProject().catch(projectError);
     } catch (error) { projectError(error); return; }
   }
+  if (runtime.isModel) { armView.context(source, projectWorkspace.files.snapshot()); armView.begin(source, projectWorkspace.files.snapshot()); }
   const accepted = runtime.executeScript(source, mode, activeEditorTab().path);
   if (!accepted) {
     appendTerminal(t("system.waitReady"));
@@ -1148,6 +1172,7 @@ function projectError(error: unknown): void {
 
 function prepareManagedExperiment(record: ExperimentSet): void {
   if (JSON.stringify(record.runtimeRef) !== JSON.stringify(MANAGED_EXPERIMENT_RUNTIME)) throw new Error(uiLocale === "ja" ? "この実行環境の版には対応していません。コードを退避できます。" : "This runtime version is unavailable. You can download the code.");
+  if (record.environment.kind === "model") { snapshotExperiment(record); return; }
   if (record.environment.kind !== "board") throw new Error(uiLocale === "ja" ? "保存された配線を復旧してください。元データは保持しています。" : "The stored wiring needs recovery. Original data is retained.");
   const error = validateEditedConnectionGraph(record.environment.connectionGraph);
   if (error) throw new Error(error);
@@ -1158,6 +1183,12 @@ function captureExperimentContent(overrideGraph?: ConnectionGraphV1): Experiment
   if (!experimentCoordinator) throw new Error(t("draft.unavailable"));
   updateActiveEditorTabSource(codeEditor.value);
   const current = experimentCoordinator.current;
+  if (current.environment.kind === "model") {
+    if (overrideGraph) throw new Error("A model cannot be saved as a board");
+    return { filesystem: projectWorkspace.files.snapshot(), editor: { tabs: editorTabs, activeTabId: activeEditorTabId },
+      environment: current.environment, initialConditions: { inputs: {}, arm: armView.conditions }, runPolicy: current.runPolicy,
+      view: { id: "arm-v1", section: observationSection, series: armView.series } };
+  }
   const graph = overrideGraph ?? activeConnectionGraph;
   const draft = connectionEditor.graph();
   return {
@@ -1198,10 +1229,28 @@ function installManagedExperiment(record: ExperimentSet, session: ExperimentSess
   observationSection = record.view.section;
   if (record.environment.kind === "board") activeConnectionGraph = record.environment.connectionGraph;
   const entries = record.environment.kind === "board" ? deviceUiEntries(activeConnectionGraph) : [];
-  deviceUiRenderer.replace(entries, { order: record.view.deviceOrder, collapsed: record.view.collapsedDevices ?? [] });
-  connectionEditor.restore(activeConnectionGraph, record.configurationDraft);
+  deviceUiRenderer.replace(entries, { order: record.view.id === "devices-v1" ? record.view.deviceOrder : [], collapsed: record.view.id === "devices-v1" ? record.view.collapsedDevices ?? [] : [] });
+  if (record.environment.kind === "board") connectionEditor.restore(activeConnectionGraph, record.configurationDraft);
   mountSoundPanel();
-  runtime.setConnectionGraph(activeConnectionGraph);
+  runtime.configureModel(record.environment.kind === "model" ? { session, conditions: record.initialConditions.arm! } : null);
+  document.body.dataset.environment = record.environment.kind;
+  deviceUiInputStatus.hidden = runtime.isModel;
+  requiredElement<HTMLButtonElement>("open-device-configuration").hidden = runtime.isModel;
+  document.querySelector<HTMLElement>(".sample-library")!.hidden = runtime.isModel;
+  if (record.view.id === "arm-v1") {
+    armView.load(record.initialConditions.arm!, record.view.series, !retainedSource);
+    armView.context(codeEditor.value, projectWorkspace.files.snapshot());
+    armView.unavailable(uiLocale === "ja" ? "アーム制御 · REPL／デバッグなし" + (globalThis.crossOriginIsolated && typeof SharedArrayBuffer !== "undefined" ? "" : "。実行にはクロスオリジン分離とSharedArrayBufferが必要です。コードと解説は閲覧できます。")
+      : "Arm control · no REPL / debugger" + (globalThis.crossOriginIsolated && typeof SharedArrayBuffer !== "undefined" ? "" : ". Execution requires cross-origin isolation and SharedArrayBuffer. Code and explanations remain readable."));
+    runtimeVersion.textContent = `${MANAGED_EXPERIMENT_RUNTIME.version} · restricted · one-axis-arm 1.0.0`;
+  } else {
+    if (!retainedSource) armView.clear();
+    runtime.setConnectionGraph(activeConnectionGraph);
+  }
+  requiredElement<HTMLElement>("terminal-input-hint").textContent = runtime.isModel
+    ? (uiLocale === "ja" ? "制御プログラムの出力 · ⌘/Ctrl+Cで強制停止" : "Controller output · ⌘/Ctrl+C to force stop") : t("terminal.hint");
+  document.querySelector<HTMLElement>('[data-i18n="editor.limit"]')!.textContent = runtime.isModel
+    ? (uiLocale === "ja" ? "物理時間1〜10秒・出力100,000文字まで" : "Simulated time 1–10 s · output up to 100,000 characters") : t("editor.limit");
   runtime.setProject(projectWorkspace.files.snapshot());
   if (!retainedSource) {
     terminalScreen.clear(); renderTerminal();
@@ -1269,7 +1318,7 @@ async function initializeManagedExperiments(): Promise<void> {
         if (locked) { cancelScheduledDraftSave(); updateActiveEditorTabSource(codeEditor.value); }
         updateRuntimeStatus(runtime.status);
       },
-      stop: async () => { runtime.stop(); soundPatchEditor.close(); await soundPanel.close(); sharedDeviceInputs?.reset(); },
+      stop: async () => { runtime.stop(); await runtime.settled(); soundPatchEditor.close(); await soundPanel.close(); sharedDeviceInputs?.reset(); },
       capture: captureExperimentContent,
       install: (candidate, session) => { experimentReadOnly = false; installManagedExperiment(candidate, session); },
       start: async () => { await startManagedRuntime(); },
@@ -1328,6 +1377,7 @@ async function initializeManagedExperiments(): Promise<void> {
 async function switchManagedSet(target: { kind: "saved"; id: string } | { kind: "new"; record: ExperimentSet }): Promise<void> {
   if (!experimentCoordinator || experimentReadOnly) throw new Error(t("draft.unavailable"));
   if (filePanel.busy || configurationBusy) throw new Error(t("files.wait"));
+  const previousId = experimentCoordinator.current.id;
   experimentOpening = true; updateRuntimeStatus(runtime.status);
   try {
     await experimentCoordinator.switchTo(target);
@@ -1336,7 +1386,14 @@ async function switchManagedSet(target: { kind: "saved"; id: string } | { kind: 
     experimentPane?.show("work");
     experimentPane?.status(uiLocale === "ja" ? "保存して切り替えました。実行すると開始します。" : "Saved and switched. Press Run to begin.");
     codeEditor.focus({ preventScroll: true });
-  } catch (error) { projectError(error); throw error; }
+  } catch (error) {
+    // A failed runtime start can follow a successful selection commit. Keep the
+    // selected set's controls/explanation reachable even when it cannot run.
+    if (experimentCoordinator.current.id !== previousId) {
+      appScreen = "workspace"; showAppScreen("workspace"); experimentPane?.show("work");
+    }
+    projectError(error); throw error;
+  }
   finally { experimentOpening = false; updateRuntimeStatus(runtime.status); }
 }
 
@@ -1572,6 +1629,7 @@ function updateActiveEditorTabSource(source: string, edited = false): void {
 }
 
 function renderEditorTabs(): void {
+  if (runtime.isModel) armView.context(codeEditor.value, projectWorkspace.files.snapshot());
   codeEditorView.refresh();
   const locked = codeEditor.readOnly;
   const elements: HTMLElement[] = editorTabs.map((tab) => {
@@ -1826,6 +1884,7 @@ function handleRuntimeMessage(message: WorkerToMainMessage): void {
       appendTerminal(message.data);
       break;
     case "error":
+      if (runtime.isModel) armView.failure(message.message);
       soundPanel.stop();
       appendExperimentOutput(message.message);
       experimentOutputDetails.open = true;
@@ -2094,7 +2153,8 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   }[status];
 
   sendButton.disabled = status !== "ready";
-  const sourceLocked = experimentLocked || experimentReadOnly || configurationBusy || status === "executing" || status === "debugging" || filePanel.busy || replRuntimeBusy;
+  const sourceLocked = experimentLocked || experimentReadOnly || configurationBusy || status === "executing" || status === "debugging" || (runtime.isModel && status === "starting") || filePanel.busy || replRuntimeBusy;
+  if (runtime.isModel) armView.runtime(status, experimentLocked || experimentReadOnly || experimentOpening || filePanel.busy);
   const soundRestartable = (status === "stopped" || status === "error") && !filePanel.busy && !replRuntimeBusy;
   const soundUnavailableReason = !soundPanel.connected
     ? (uiLocale === "ja" ? "音源を接続してください。" : "Connect the sound module.")
@@ -2119,8 +2179,9 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   if (status !== "debugging" && status !== "executing") {
     codeEditorView.setBreakpoints([]);
   }
-  terminalDirectInput.disabled = experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || filePanel.busy;
-  terminalShell.dataset.ready = String(status === "ready" || status === "debugging");
+  terminalDirectInput.disabled = runtime.isModel || experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || filePanel.busy;
+  replInput.disabled = runtime.isModel;
+  terminalShell.dataset.ready = String(!runtime.isModel && (status === "ready" || status === "debugging"));
   if (status !== "ready") {
     terminalInputComposing = false;
     terminalDirectInput.value = "";
@@ -2132,10 +2193,10 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   } else {
     debuggerCommandInput.value = "";
   }
-  sendButton.disabled = experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || filePanel.busy;
-  debugScriptButton.disabled = experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || sharedDebuggerChannel === null || filePanel.busy || replRuntimeBusy;
+  sendButton.disabled = runtime.isModel || experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || filePanel.busy;
+  debugScriptButton.disabled = runtime.isModel || experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || sharedDebuggerChannel === null || filePanel.busy || replRuntimeBusy;
   debugScriptButton.title =
-    sharedDebuggerChannel === null
+    runtime.isModel ? (uiLocale === "ja" ? "アーム実験は通常実行を使います。" : "Arm experiments use normal execution.") : sharedDebuggerChannel === null
       ? t("debugger.requiresIsolation")
       : t("debugger.description");
   stopButton.disabled = status === "stopped";

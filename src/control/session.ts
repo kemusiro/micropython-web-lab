@@ -30,6 +30,7 @@ export interface ArmSessionOptions {
   onStatus?(status: ArmSessionStatus): void;
   onOutput?(type: "stdout" | "stderr", text: string): void;
   onProject?(project: ProjectSnapshot): void;
+  onCheckpoint?(): Promise<void>;
   onFrame?(frame: ArmTelemetry, lagMs: number): void;
   runtimeFactory?: RuntimeWorkerFactory;
   simulationFactory?: () => SimulationWorker;
@@ -114,7 +115,7 @@ export class ArmRuntimeSession {
         simulation.onerror = () => this.finish("failed", "Simulation Worker failed");
         simulation.onmessageerror = () => this.finish("failed", "Simulation Worker message could not be decoded");
         this.#runtime = new RuntimeClient({ onStatus: status => { if (!this.#closed && status === "ready" && this.#status === "starting") { runtimeReady = true; ready(); } },
-          onMessage: message => this.message(message) }, this.options.runtimeFactory, { runtimeProfile: profile, project: this.#project });
+          onMessage: message => this.message(message), onCheckpoint: this.options.onCheckpoint }, this.options.runtimeFactory, { runtimeProfile: profile, project: this.#project });
         simulation.postMessage(profile);
         if (!this.#closed) this.#runtime.start();
       } catch (error) { this.finish("failed", error instanceof Error ? error.message : "Arm startup failed"); }

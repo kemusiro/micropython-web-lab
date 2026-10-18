@@ -164,7 +164,7 @@ test("browses categories without stopping Python, then saves and switches comple
   await page.locator("#experiment-browse").click();
   await expect(page.locator("[data-experiment-category]")).toHaveCount(5);
   await page.locator('[data-experiment-category="physical"]').click();
-  await expect(page.locator("#experiment-pane")).toContainText("準備中");
+  await expect(page.locator('[data-create-experiment="one-axis-arm"]')).toBeVisible();
   await page.locator("#experiment-return").click();
   await page.locator("#repl-input").fill("print('kept', kept_variable)");
   await page.locator("#send-button").click();
@@ -268,7 +268,7 @@ test("shows English categories in forced colors and preserves the work pane scro
   await page.locator("#experiment-browse").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.getByRole("button", { name: "Explore devices", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Robots and control", exact: true }).click();
-  await expect(page.locator("#experiment-pane")).toContainText("in preparation");
+  await expect(page.locator("#experiment-pane")).toContainText("One-axis arm with a load");
   await page.locator("#experiment-return").click();
   expect(await panel.evaluate(element => element.scrollTop)).toBe(previous);
   await page.locator("#experiment-browse").click();

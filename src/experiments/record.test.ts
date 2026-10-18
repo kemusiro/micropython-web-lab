@@ -1,8 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { makeExperiment } from "../../fixtures/experiments/fixture";
 import { applyExperimentContent, checkExperimentQuota, createExperiment, experimentBytes, experimentProject, MAX_EXPERIMENT_TOTAL_BYTES, snapshotExperiment } from "./record";
+import { createTemplateCopy } from "./catalog";
 
 describe("experiment record contract", () => {
+  it("round-trips model conditions and registered plots without serializing runtime state", async () => {
+    const arm = await createTemplateCopy("one-axis-arm", "ja");
+    const result = snapshotExperiment({ ...arm, initialConditions: { inputs: {}, arm: { ...arm.initialConditions.arm, targetAngleRad: 1, payloadMassKg: 0.4 } },
+      view: { id: "arm-v1", section: "configuration", series: ["speed", "acceleration"] }, telemetry: [1, 2], selectedTick: 123 });
+    expect(result.environment.kind).toBe("model"); expect(result.initialConditions.arm?.payloadMassKg).toBe(0.4);
+    expect(result.view).toEqual({ id: "arm-v1", section: "configuration", series: ["speed", "acceleration"] });
+    expect(result).not.toHaveProperty("telemetry"); expect(result).not.toHaveProperty("selectedTick");
+    const again = snapshotExperiment(result); expect(again).toEqual(result); expect(again.initialConditions.arm).not.toBe(result.initialConditions.arm);
+  });
+  it("rejects unsupported model versions and mixed board/model records without modifying source", async () => {
+    const arm = await createTemplateCopy("one-axis-arm", "ja");
+    for (const changes of [
+      { environment: { kind: "model", model: { id: "one-axis-arm", version: "2" } } },
+      { initialConditions: { inputs: { button: true }, arm: arm.initialConditions.arm } },
+      { initialConditions: { inputs: {} } }, { runPolicy: { kind: "interactive" } },
+      { view: { id: "arm-v1", section: "experience", series: ["custom-renderer"] } },
+      { configurationDraft: makeExperiment().environment.kind === "board" ? (makeExperiment().environment as any).connectionGraph : {} },
+      { view: makeExperiment().view },
+    ]) expect(() => snapshotExperiment({ ...arm, ...changes })).toThrow();
+    expect(arm.editor.tabs[0]!.source).toContain("experiment.step()");
+    const board = makeExperiment();
+    expect(() => snapshotExperiment({ ...board, environment: { ...board.environment, model: { id: "one-axis-arm", version: "1.0.0" } } })).toThrow("Mixed");
+  });
   it("assigns separate IDs to user copies without changing the template", () => {
     const template = makeExperiment("template");
     const options = { title: template.title, origin: template.origin, runtimeRef: template.runtimeRef };

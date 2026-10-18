@@ -85,10 +85,10 @@ Device order and collapsed cards are saved per set. Multiline input visibility r
 
 Choose a topic offers Explore devices, Robots and control, Create sound and music, Learn programming,
 and Learn with books. Topics may appear in several categories. Current sets cover LED blinking, button
-input, button-to-LED control, a general device lab and YM2203. Arm physics and book material are in
-preparation. The [arm physics model](docs/arm-physics.md) and
-[MicroPython/Simulation Worker integration](docs/arm-runtime.md) have been verified in development fixtures.
-They are not yet connected to the normal UI (documentation in Japanese).
+input, button-to-LED control, a general device lab, YM2203 and a one-axis arm with a load.
+Open Robots and control, create an arm set, then Run to see 2D motion and angle plots.
+Setup changes the load, target, gains and gravity compensation; the time slider inspects recorded poses and values.
+See the [arm workspace guide (Japanese)](docs/arm-workspace.md). Book material remains in preparation.
 Use Saved sets to reopen your work; Create another makes an independent copy of the bundled template. Experience, Setup and Explanation views expose each topic's controls. Name and backup allows
 renaming and recovery downloads. Template updates never overwrite your copies.
 

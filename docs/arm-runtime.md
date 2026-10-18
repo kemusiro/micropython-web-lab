@@ -1,7 +1,7 @@
 # 一軸アームの同期実行基盤（E4）
 
 制限付きMicroPythonで書いた制御ループを、E3の数値モデルと同期して実行する。
-`src/control/session.ts`がWorkerのペアを所有する。通常画面のロボット入口、保存形式、描画はまだ接続しない。
+`src/control/session.ts`がWorkerのペアを所有する。通常画面への接続と保存・描画は[E5の実験画面](arm-workspace.md)を参照する。
 数値モデルは[一軸アームの物理モデル](arm-physics.md)、選択の理由は[ADR 0054](adr/0054-connect-micropython-to-a-simulation-worker.md)を参照する。
 
 ## ホストからの利用
@@ -114,7 +114,8 @@ Simulation Workerは仮想tickに対応する実時間まで待つ。遅れて�
 プロジェクトのハッシュはパス順に各ファイルの生バイトのSHA-256と空ディレクトリをまとめたもの。
 実際にimportされたものだけを追跡する依存グラフではない。
 
-Pythonから受け取ったファイル更新はホストへ複製し、`result.project`へ返す。現在のE4では自動永続化しない。
+Pythonから受け取ったファイル更新はホストへ複製し、`result.project`へ返す。このクラス単体では自動永続化しない。
+E5の通常画面は既存の保存ポートと`onCheckpoint`へ接続する。直接このクラスを使うホストは保存処理を用意する。
 強制停止ではWorkerから未送信のファイル変更まで回収できるとは限らない。
 
 ## 権限と互換性
@@ -125,7 +126,8 @@ Pythonから受け取ったファイル更新はホストへ複製し、`result.
 共有メモリはPythonへ渡さない。未対応のモデルや版を通常のPico構成へ置き換えない。
 
 Runtime Protocol 16と制御版1を両側で検査する。旧15のWorkerへは接続できず、同じ配布物で更新する。
-WASMの上流ソース、固定成果物、Node.js、Device API、DB版・保存レコードは変更しない。
+WASMの上流ソース、固定成果物、Node.js、Device APIは変更しない。この実行基盤自体はDBへ書き込まない。
+通常画面のモデル型レコードは[E5の実験画面](arm-workspace.md)で定義する。
 
 ## 検証
 
@@ -139,5 +141,5 @@ WASMの上流ソース、固定成果物、Node.js、Device API、DB版・保存
 ```
 
 開発サーバーには`/fixtures/control/`の検証ページを置く。これはテスト用ホストで、本番成果物へ含めない。
-通常画面の保存・カタログ・アーム描画・グラフへの接続はE5で行う。
+通常画面の保存・カタログ・アーム描画・グラフは[E5](arm-workspace.md)で接続した。
 製品版Chrome・Edge・Firefox・Safari間と実機での検証は残る。

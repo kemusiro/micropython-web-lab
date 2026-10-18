@@ -2,7 +2,7 @@
 
 `src/physics/one-axis-arm.ts`は鉛直面内の一軸剛体を計算し、`arm-control.ts`は検証用のPD制御を行う。
 どちらもDOM、描画、実時間、乱数、MicroPython、ストレージへ依存しない。
-通常画面からアームを動かす機能はまだなく、ロボット・制御の入口は準備中のままである。
+通常画面からの実行と表示は[E5の実験画面](arm-workspace.md)を参照する。ここでは数値モデルそのものを説明する。
 採用理由は[ADR 0053](adr/0053-add-a-deterministic-one-axis-arm-model.md)を参照する。
 
 ## 座標と力学
@@ -118,4 +118,4 @@ RK4もエネルギーを厳密保存する手法ではなく、検査した刻�
 ```
 
 Firefox・Safari・Edgeと実機での数値差は未確認。MicroPythonとの同期呼出し、通信期限、世代、
-強制停止は[E4の実行基盤](arm-runtime.md)へ追加した。アーム描画と時系列グラフはE5で接続する。
+強制停止は[E4の実行基盤](arm-runtime.md)へ追加した。アーム描画と時系列グラフは[E5の実験画面](arm-workspace.md)で接続した。

@@ -9,7 +9,8 @@ import { createYm2203PrototypeDefinition } from "../devices/ym2203-prototype";
 describe("bundled experiment catalog", () => {
   it("uses overlapping categories and leaves unavailable subjects without runnable placeholders", () => {
     expect(categoryDefinitions).toHaveLength(5);
-    expect(templateDefinitions.filter(t => t.categories.includes("physical") || t.categories.includes("books"))).toHaveLength(0);
+    expect(templateDefinitions.filter(t => t.categories.includes("physical")).map(t => t.id)).toEqual(["one-axis-arm"]);
+    expect(templateDefinitions.filter(t => t.categories.includes("books"))).toHaveLength(0);
     expect(templateDefinitions.find(t => t.id === "button-led")!.categories).toEqual(["devices", "learn"]);
   });
   it("creates independent copies with stable content hashes across locales", async () => {
@@ -24,6 +25,11 @@ describe("bundled experiment catalog", () => {
   });
   it.each(templateDefinitions.map(template => template.id))("prepares complete, resolvable contents for %s", async id => {
     const record = await createTemplateCopy(id, "ja");
+    if (id === "one-axis-arm") {
+      expect(record.environment).toEqual({ kind: "model", model: { id: "one-axis-arm", version: "1.0.0" } });
+      expect(record.view.id).toBe("arm-v1"); expect(record.initialConditions.arm?.payloadMassKg).toBe(0.15);
+      expect(record.editor.tabs[0]!.source).toContain("experiment.step()"); return;
+    }
     if (record.environment.kind !== "board") throw new Error("Expected board");
     const graph = record.environment.connectionGraph;
     const definitions = new Map(createManagedDeviceDefinitions());

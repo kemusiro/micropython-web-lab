@@ -1,6 +1,7 @@
 import { ARM_CONTROL_PERIOD_US, DEFAULT_ARM_PHYSICS, OneAxisArm, exactObject, finiteNumber, type ArmIntegrationStepUs, type ArmTrace } from "./one-axis-arm";
 
-/** Internal reference-controller conditions, in SI units. Not a persisted set or Python API. */
+/** SI conditions shared by the reference controller and model runtime.
+ * Persistence and Python APIs own their explicit surrounding contracts. */
 export interface ArmControlConditions {
   readonly payloadMassKg: number;
   readonly initialAngleRad: number;

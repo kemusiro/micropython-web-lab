@@ -14,6 +14,7 @@ interface PaneOptions {
   backup(): Promise<void>;
   repair(): Promise<void>;
   retry(): Promise<void>;
+  present?(record: ExperimentSet | null, section: ExperimentSet["view"]["section"], visible: boolean): void;
 }
 
 /** Presentation only: browsing never changes execution, project files or the selected set. */
@@ -80,7 +81,8 @@ export class ExperimentPane {
     this.#screen = screen;
     if (screen !== "work") this.#scrollRoot.scrollTop = 0;
     const navigation = ++this.#navigation;
-    this.deviceRoot.hidden = screen !== "work" || (this.#record?.view.section ?? "experience") !== "experience";
+    this.deviceRoot.hidden = screen !== "work" || this.#record?.environment.kind === "model" || (this.#record?.view.section ?? "experience") !== "experience";
+    this.options.present?.(this.#record, this.#record?.view.section ?? "experience", screen === "work");
     this.#body.replaceChildren();
     if (screen === "work") { this.renderWork(); this.#scrollRoot.scrollTop = this.#workScroll; }
     else if (screen === "categories") {
@@ -111,7 +113,8 @@ export class ExperimentPane {
   private renderWork(): void {
     if (this.#screen !== "work") return;
     const section = this.#record?.view.section ?? "experience";
-    this.deviceRoot.hidden = section !== "experience";
+    this.deviceRoot.hidden = section !== "experience" || this.#record?.environment.kind === "model";
+    this.options.present?.(this.#record, section, true);
     this.#body.replaceChildren();
     const tabs = document.createElement("div"); tabs.className = "experiment-view-tabs";
     for (const [id, ja, en] of [["experience", "体験", "Experience"], ["configuration", "構成", "Setup"], ["explanation", "解説", "Explanation"]] as const) {
@@ -126,7 +129,7 @@ export class ExperimentPane {
     if (this.#readOnly && this.#record?.environment.kind === "unavailable") {
       this.#body.append(this.button(this.text("既定の配線で復旧", "Recover with default wiring"), () => this.action(this.options.repair), "experiment-repair-wiring"));
     }
-    if (section === "configuration") {
+    if (section === "configuration" && this.#record?.environment.kind !== "model") {
       this.#body.append(this.paragraph(this.text("適用中の配線と、編集中の候補は分けて保存します。", "Applied wiring and pending edits are saved separately.")),
         this.button(this.text("構成・配線を編集", "Edit devices and wiring"), this.options.configure));
     } else if (section === "explanation") {

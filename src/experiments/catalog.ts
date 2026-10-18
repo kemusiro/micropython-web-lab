@@ -6,20 +6,26 @@ import { prepareYm2203Library } from "../examples/ym2203-library";
 import { ProjectFiles } from "../project/filesystem";
 import { createExperiment, type ExperimentSet } from "./record";
 import type { SupportedLocale } from "../i18n/i18n";
+import { ARM_CONTROL_SOURCE } from "../control/python-module";
+import { ARM_MODEL } from "../physics/one-axis-arm";
+import { DEFAULT_ARM_CONTROL } from "../physics/arm-control";
 
 import { MANAGED_EXPERIMENT_RUNTIME } from "../runtime/build-reference";
 export { MANAGED_EXPERIMENT_RUNTIME } from "../runtime/build-reference";
-export type TemplateId = "led-blink" | "button-input" | "button-led" | "device-lab" | "ym2203";
+export type TemplateId = "led-blink" | "button-input" | "button-led" | "device-lab" | "ym2203" | "one-axis-arm";
 export type CategoryId = "devices" | "physical" | "sound" | "learn" | "books";
 type Copy = readonly [string, string];
 export const categoryDefinitions: readonly { id: CategoryId; title: Copy; description: Copy }[] = [
   { id: "devices", title: ["デバイスを試す", "Explore devices"], description: ["LEDやセンサーを動かす", "Try LEDs and sensors"] },
-  { id: "physical", title: ["ロボットと制御", "Robots and control"], description: ["一軸アームの物理実験は準備中", "Arm physics experiments are in preparation"] },
+  { id: "physical", title: ["ロボットと制御", "Robots and control"], description: ["重りと制御を変えてアームの動きを見る", "Explore arm motion, loads and control"] },
   { id: "sound", title: ["音と音楽をつくる", "Create sound and music"], description: ["YM2203で音色や合奏を試す", "Explore YM2203 tones and ensembles"] },
   { id: "learn", title: ["プログラミングを学ぶ", "Learn programming"], description: ["入力・処理・出力の関係を見る", "Observe input, processing and output"] },
   { id: "books", title: ["書籍から学ぶ", "Learn with books"], description: ["書籍連動の教材は準備中", "Book companion material is in preparation"] },
 ];
 export const templateDefinitions: readonly { id: TemplateId; categories: readonly CategoryId[]; title: Copy; description: Copy; lesson: Copy }[] = [
+  { id: "one-axis-arm", categories: ["physical", "learn"], title: ["重り付き一軸アーム", "One-axis arm with a load"],
+    description: ["制御コード、重り、目標角度を用意。動作とグラフで重力や行き過ぎを観察します。", "Includes a controller, load and target. Observe gravity and overshoot in motion and plots."],
+    lesson: ["要求トルクを10 msごとに与えます。重り・減衰・重力補償を変えて再実行し、行き過ぎと最後の偏差を比べます。", "Apply torque every 10 ms. Rerun with a different load, damping or gravity compensation; compare overshoot and final error."] },
   { id: "led-blink", categories: ["devices", "learn"], title: ["LEDを点滅させる", "Blink an LED"],
     description: ["内蔵LEDとmain.pyを用意。間隔を変えて観察します。", "Includes the built-in LED and main.py. Change the blink interval."],
     lesson: ["interval_msを変えて実行すると、点滅の間隔が変わります。開くだけではコードを実行しません。", "Change interval_ms and run again. Opening a set does not run its code."] },
@@ -41,12 +47,21 @@ export function localized(copy: Copy, locale: SupportedLocale): string { return 
 export async function createTemplateCopy(id: TemplateId, locale: SupportedLocale): Promise<ExperimentSet> {
   const definition = templateDefinitions.find(entry => entry.id === id);
   if (!definition) throw new Error("Unknown bundled template");
-  const source = id === "button-led" ? BUTTON_LED_SOURCE : id === "button-input" ? deviceExampleSource("button-gp15")!
+  const source = id === "one-axis-arm" ? ARM_CONTROL_SOURCE : id === "button-led" ? BUTTON_LED_SOURCE : id === "button-input" ? deviceExampleSource("button-gp15")!
     : id === "ym2203" ? YM2203_SCORE_EXAMPLE_SOURCE : FIRST_EXPERIMENT_SOURCE;
   const files = new ProjectFiles();
   files.write("main.py", new TextEncoder().encode(source));
   const tabs = [{ id: "main", title: id === "button-input" ? (locale === "ja" ? "ボタンの実験" : "Button experiment") : "main.py", path: "main.py", source }];
   const filesystem = id === "ym2203" ? prepareYm2203Library(files, tabs, true, true) : files.snapshot();
+  if (id === "one-axis-arm") {
+    const model = { id: ARM_MODEL.id, version: ARM_MODEL.version };
+    const payload = JSON.stringify({ id, version: "1.0.0", filesystem, source, model, conditions: DEFAULT_ARM_CONTROL, runtimeRef: MANAGED_EXPERIMENT_RUNTIME });
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
+    const hash = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, "0")).join("");
+    return createExperiment({ version: 1, filesystem, tabs, activeTabId: "main" }, { kind: "model", model }, {
+      title: localized(definition.title, locale), origin: { kind: "template", id, version: "1.0.0", hash }, runtimeRef: MANAGED_EXPERIMENT_RUNTIME,
+    });
+  }
   const instanceIds = id === "device-lab" ? null : id === "ym2203" ? ["ym2203-prototype"]
     : id === "led-blink" ? ["built-in-led"] : id === "button-input" ? ["button-gp15"] : ["built-in-led", "button-gp15"];
   const connectionGraph = instanceIds === null ? MANAGED_CONNECTION_GRAPH : { ...MANAGED_DEVICE_CATALOG_GRAPH,

@@ -160,7 +160,7 @@ REPLは出力画面モデルと不可視のブラウザ入力要素を分ける�
 `src/physics`の一軸アームは、ボードやMicroPython、DOM、実時間から独立した数値モデルである。
 `OneAxisArm.step`一回で10 msを進め、1 msのRK4で積分する。状態と区間トルクの記録を分け、
 モデル版、パラメータ、予定tick数、完了・停止状態を保持する。検証用のPD参照制御器を持つが、
-参照計算と実際のPython実行は分けて扱う。本番画面とはまだ接続しない。
+参照計算と実際のPython実行は分けて扱う。E5の本番画面はE4の実行結果を表示する。
 詳細と適用範囲は[物理モデル](arm-physics.md)、
 [ADR 0053](adr/0053-add-a-deterministic-one-axis-arm-model.md)を参照する。
 
@@ -170,8 +170,13 @@ E4の`ArmRuntimeSession`は、明示的なarm Profileを持つMicroPython Worker
 Runtime Protocol 16と`arm-control-v1`の能力を確認し、共有領域の要求・完了番号で同期する。
 Pythonへ公開するのは実験専用の操作だけで、ボード構成や汎用JavaScriptを渡さない。
 起動・通信の期限、世代、観測の上限を検査し、停止時は両Workerを破棄して確定済み記録とファイルを回収する。
-通常画面へのカタログ・保存・描画の接続はE5の対象である。
+通常画面は`WorkspaceRuntime`がボードとモデルの実行先を切り替え、E5でカタログ・保存・描画へ接続する。
+モデルのWorkerペアは実行要求で生成し、毎回最新の保存済みファイルと条件を渡す。
+`ArmRecording`が観測を表示用へ複製し、`ArmExperimentView`のSVG、グラフ、時刻選択へ渡す。
+表示の間引き・系列の選択・探索は物理tickを操作しない。
+条件と表示だけをセットへ保存し、実行系列はページ内に保持する。
 詳細は[実行基盤](arm-runtime.md)、[ADR 0054](adr/0054-connect-micropython-to-a-simulation-worker.md)を参照する。
+実験画面と保存契約の追加は[一軸アーム画面](arm-workspace.md)、[ADR 0055](adr/0055-show-arm-experiments-in-the-workspace.md)を参照する。
 
 ## ローカルDevice開発
 

@@ -1,11 +1,15 @@
 import { snapshotBoardGraph } from "./legacy-project";
 import { snapshotStoredProject, type StoredProject } from "../project/project-state";
 import type { ConnectionGraphV1 } from "../connections/connection-model";
+import { ARM_MODEL } from "../physics/one-axis-arm";
+import { DEFAULT_ARM_CONTROL, snapshotArmControlConditions, type ArmControlConditions } from "../physics/arm-control";
+import { DEFAULT_ARM_SERIES, snapshotArmSeries, type ArmExtraSeries } from "../control/presentation";
 
 export const MAX_EXPERIMENT_SETS = 16;
 export const MAX_EXPERIMENT_TOTAL_BYTES = 64 * 1024 * 1024;
 export type ExperimentEnvironment =
   | { readonly kind: "board"; readonly connectionGraph: ConnectionGraphV1 }
+  | { readonly kind: "model"; readonly model: { readonly id: "one-axis-arm"; readonly version: "1.0.0" } }
   | { readonly kind: "unavailable"; readonly reason: "invalid-legacy-connection" };
 export interface RuntimeReference { readonly id: string; readonly version: string; readonly buildHash: string }
 export type ExperimentOrigin =
@@ -15,14 +19,14 @@ export interface ExperimentContent {
   readonly filesystem: StoredProject["filesystem"];
   readonly editor: { readonly tabs: StoredProject["tabs"]; readonly activeTabId: string };
   readonly environment: ExperimentEnvironment;
-  readonly initialConditions: { readonly inputs: Readonly<Record<string, number | boolean>> };
-  readonly runPolicy: { readonly kind: "interactive" };
+  readonly initialConditions: { readonly inputs: Readonly<Record<string, number | boolean>>; readonly arm?: ArmControlConditions };
+  readonly runPolicy: { readonly kind: "interactive" | "fixed-step" };
   readonly view: {
     readonly id: "devices-v1";
     readonly section: "experience" | "configuration" | "explanation";
     readonly deviceOrder: readonly string[];
     readonly collapsedDevices?: readonly string[];
-  };
+  } | { readonly id: "arm-v1"; readonly section: "experience" | "configuration" | "explanation"; readonly series: readonly ArmExtraSeries[] };
   readonly configurationDraft?: ConnectionGraphV1;
 }
 export interface ExperimentSet extends ExperimentContent {
@@ -67,8 +71,15 @@ export function snapshotExperiment(value: unknown): ExperimentSet {
   const project = snapshotStoredProject({ version: 1, filesystem: v.filesystem, tabs: editor.tabs, activeTabId: editor.activeTabId });
   const e = recordObject(v.environment);
   let environment: ExperimentEnvironment;
-  if (e.kind === "board") environment = { kind: "board", connectionGraph: snapshotBoardGraph(e.connectionGraph) };
-  else if (e.kind === "unavailable" && e.reason === "invalid-legacy-connection") environment = { kind: "unavailable", reason: e.reason };
+  if (e.kind === "board") {
+    if (e.model !== undefined) throw new Error("Mixed model and board configuration");
+    environment = { kind: "board", connectionGraph: snapshotBoardGraph(e.connectionGraph) };
+  }
+  else if (e.kind === "model") {
+    const model = recordObject(e.model);
+    if (model.id !== ARM_MODEL.id || model.version !== ARM_MODEL.version || e.connectionGraph !== undefined) throw new Error("Unsupported experiment model");
+    environment = { kind: "model", model: { id: ARM_MODEL.id, version: ARM_MODEL.version } };
+  } else if (e.kind === "unavailable" && e.reason === "invalid-legacy-connection") environment = { kind: "unavailable", reason: e.reason };
   else throw new Error("Unsupported experiment environment");
   const origin = recordObject(v.origin);
   let originCopy: ExperimentOrigin;
@@ -84,26 +95,35 @@ export function snapshotExperiment(value: unknown): ExperimentSet {
     if (key === "__proto__" || (typeof input !== "boolean" && (typeof input !== "number" || !Number.isFinite(input)))) throw new Error("Invalid initial input");
     inputCopy[key] = input as number | boolean;
   }
-  if (recordObject(v.runPolicy).kind !== "interactive") throw new Error("Unsupported experiment run policy");
+  const arm = environment.kind === "model" ? snapshotArmControlConditions(recordObject(v.initialConditions).arm) : undefined;
+  if (arm ? Object.keys(inputCopy).length || v.configurationDraft !== undefined : recordObject(v.initialConditions).arm !== undefined) throw new Error("Mixed model and board configuration");
+  const runPolicy = arm ? "fixed-step" : "interactive";
+  if (recordObject(v.runPolicy).kind !== runPolicy) throw new Error("Unsupported experiment run policy");
   const view = recordObject(v.view);
-  if (view.id !== "devices-v1" || !["experience", "configuration", "explanation"].includes(view.section as string) ||
-      !Array.isArray(view.deviceOrder) || view.deviceOrder.length > 64) throw new Error("Invalid experiment view");
-  const deviceOrder = Array.from(view.deviceOrder, recordIdentifier);
-  if (new Set(deviceOrder).size !== deviceOrder.length) throw new Error("Duplicate device order");
-  let collapsedDevices: string[] | undefined;
-  if (view.collapsedDevices !== undefined) {
-    if (!Array.isArray(view.collapsedDevices) || view.collapsedDevices.length > 64) throw new Error("Invalid collapsed devices");
-    collapsedDevices = Array.from(view.collapsedDevices, recordIdentifier);
-    if (new Set(collapsedDevices).size !== collapsedDevices.length) throw new Error("Duplicate collapsed devices");
+  if (!["experience", "configuration", "explanation"].includes(view.section as string)) throw new Error("Invalid experiment section");
+  let viewCopy: ExperimentSet["view"];
+  if (arm) {
+    if (view.id !== "arm-v1" || view.deviceOrder !== undefined || view.collapsedDevices !== undefined) throw new Error("Invalid arm view");
+    viewCopy = { id: "arm-v1", section: view.section as ExperimentSet["view"]["section"], series: snapshotArmSeries(view.series) };
+  } else {
+    if (view.id !== "devices-v1" || !Array.isArray(view.deviceOrder) || view.deviceOrder.length > 64) throw new Error("Invalid experiment view");
+    const deviceOrder = Array.from(view.deviceOrder, recordIdentifier);
+    if (new Set(deviceOrder).size !== deviceOrder.length) throw new Error("Duplicate device order");
+    let collapsedDevices: string[] | undefined;
+    if (view.collapsedDevices !== undefined) {
+      if (!Array.isArray(view.collapsedDevices) || view.collapsedDevices.length > 64) throw new Error("Invalid collapsed devices");
+      collapsedDevices = Array.from(view.collapsedDevices, recordIdentifier);
+      if (new Set(collapsedDevices).size !== collapsedDevices.length) throw new Error("Duplicate collapsed devices");
+    }
+    viewCopy = { id: "devices-v1", section: view.section as ExperimentSet["view"]["section"], deviceOrder,
+      ...(collapsedDevices === undefined ? {} : { collapsedDevices }) };
   }
   return {
     recordVersion: 1, id: recordIdentifier(v.id), revision: v.revision as number,
     title: text(v.title, 120), createdAt: date(v.createdAt), savedAt: date(v.savedAt), origin: originCopy,
     runtimeRef: { id: recordIdentifier(runtime.id), version: text(runtime.version, 80), buildHash: hash(runtime.buildHash) },
     filesystem: project.filesystem, editor: { tabs: project.tabs, activeTabId: project.activeTabId }, environment,
-    initialConditions: { inputs: inputCopy }, runPolicy: { kind: "interactive" },
-    view: { id: "devices-v1", section: view.section as ExperimentSet["view"]["section"], deviceOrder,
-      ...(collapsedDevices === undefined ? {} : { collapsedDevices }) },
+    initialConditions: { inputs: inputCopy, ...(arm ? { arm } : {}) }, runPolicy: { kind: runPolicy }, view: viewCopy,
     ...(v.configurationDraft === undefined ? {} : {
       configurationDraft: snapshotBoardGraph(v.configurationDraft),
     }),
@@ -128,8 +148,10 @@ export function createExperiment(project: StoredProject, environment: Experiment
   return snapshotExperiment({ recordVersion: 1, id: options.id ?? crypto.randomUUID(), revision: 1,
     title: options.title, createdAt: now, savedAt: now, origin: options.origin, runtimeRef: options.runtimeRef,
     filesystem: project.filesystem, editor: { tabs: project.tabs, activeTabId: project.activeTabId }, environment,
-    initialConditions: { inputs: {} }, runPolicy: { kind: "interactive" },
-    view: { id: "devices-v1", section: "experience", deviceOrder: [] } });
+    initialConditions: { inputs: {}, ...(environment.kind === "model" ? { arm: DEFAULT_ARM_CONTROL } : {}) },
+    runPolicy: { kind: environment.kind === "model" ? "fixed-step" : "interactive" },
+    view: environment.kind === "model" ? { id: "arm-v1", section: "experience", series: DEFAULT_ARM_SERIES }
+      : { id: "devices-v1", section: "experience", deviceOrder: [] } });
 }
 
 /** Count binary contents once, plus UTF-8 metadata including buffers and paths. */
