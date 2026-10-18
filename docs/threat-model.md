@@ -135,3 +135,16 @@ YM2203大容量予約（ADR 0048）は保存イベントを131,071件、Worker�
 
 GC用のAsyncify退避領域は固定64 KiBとし、ドライバー内GCのスタック不足を防ぐ。
 Pythonの固定ヒープ・実行権限を拡張せず、同期JSプロキシ内GCは転送前の先行GCで避ける。
+
+## 一軸アームのモデル型Profile（E4）
+
+Runtime Protocol 16の明示的なarm Profileだけで、実験用`weblab.control`を登録する。
+新しい私有ホストモジュールは固定操作のディスパッチとJSONに限定し、共有メモリ、Worker、
+ボード、DOM、ストレージ、任意ネットワークをPythonへ公開しない。モジュールと関数は
+nullプロトタイプでfreezeし、固定版JsProxyの属性探索からFunction/Objectへ到達する経路を閉じる。
+実行・世代を固定し、一回の実行後のハンドルを無効にする。
+
+共有領域は96,168バイト、観測は最大1,001点。要求・完了番号、世代、版、有限値と容量を検査する。
+起動10秒、step通信1秒の期限と、両Workerの外部破棄を持つ。stepを呼ばない無限ループの
+実行時間を自動制限するものではない。通常画面へはE5で接続する。
+[境界と検証](arm-runtime.md)と[ADR 0054](adr/0054-connect-micropython-to-a-simulation-worker.md)を参照する。

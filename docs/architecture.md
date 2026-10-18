@@ -104,10 +104,10 @@ RuntimeClientを再生成しない。配線の適用によるWorker再生成は�
 表示レイヤーによって入力・保存・Tab操作を変更しない。構文解析や文字列内の式の色分けは行わない。
 実験画面の狭い表示でも入力欄と色分けに同じフォントサイズ・行高を使用する。
 
-現行のWorker通信はv15で、pdbの`break`／`clear`による変更を`debugger-breakpoints`で通知する。
+現行のWorker通信はv16で、pdbの`break`／`clear`による変更を`debugger-breakpoints`で通知する。
 実行IDとデバッグ停止状態を検査した上で行番号欄へ赤い丸を表示し、停止行には黄色い矢印を併記する。
 ブレークポイントは再開中も維持し、実行終了・Worker再生成では消去する。保存形式は変更しない。
-詳細とv14からの更新方針は[ADR 0036](adr/0036-add-editor-highlighting-and-breakpoint-markers.md)を参照する。
+ブレークポイント通知はv15で導入した。詳細とv14からの更新方針は[ADR 0036](adr/0036-add-editor-highlighting-and-breakpoint-markers.md)を参照する。
 
 コードエディタは複数タブを扱い、ブラウザ内の版付き保存形式へ下書きを保存する。仮想デバイスのサンプルは
 既存コードを上書きせず、パスを持たない「無題」タブとして追加する。すべてのタブの自動保存は復元用の
@@ -160,9 +160,18 @@ REPLは出力画面モデルと不可視のブラウザ入力要素を分ける�
 `src/physics`の一軸アームは、ボードやMicroPython、DOM、実時間から独立した数値モデルである。
 `OneAxisArm.step`一回で10 msを進め、1 msのRK4で積分する。状態と区間トルクの記録を分け、
 モデル版、パラメータ、予定tick数、完了・停止状態を保持する。検証用のPD参照制御器を持つが、
-利用者のPython実行や本番画面とはまだ接続しない。
+参照計算と実際のPython実行は分けて扱う。本番画面とはまだ接続しない。
 詳細と適用範囲は[物理モデル](arm-physics.md)、
 [ADR 0053](adr/0053-add-a-deterministic-one-axis-arm-model.md)を参照する。
+
+## モデル型の同期実行
+
+E4の`ArmRuntimeSession`は、明示的なarm Profileを持つMicroPython WorkerとSimulation Workerを所有する。
+Runtime Protocol 16と`arm-control-v1`の能力を確認し、共有領域の要求・完了番号で同期する。
+Pythonへ公開するのは実験専用の操作だけで、ボード構成や汎用JavaScriptを渡さない。
+起動・通信の期限、世代、観測の上限を検査し、停止時は両Workerを破棄して確定済み記録とファイルを回収する。
+通常画面へのカタログ・保存・描画の接続はE5の対象である。
+詳細は[実行基盤](arm-runtime.md)、[ADR 0054](adr/0054-connect-micropython-to-a-simulation-worker.md)を参照する。
 
 ## ローカルDevice開発
 

@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 
+import { ArmPythonBridge } from "../control/python-module";
+import { snapshotArmProfile, type ArmRuntimeProfile } from "../control/channel";
 import {
   MICROPYTHON_BUILD_VARIANT,
   MICROPYTHON_SOURCE_COMMIT,
@@ -63,6 +65,9 @@ import type { ProjectSnapshot } from "../project/filesystem";
 
 declare const self: DedicatedWorkerGlobalScope;
 
+let armBridge: ArmPythonBridge | null = null;
+let modelRuntime = false;
+let modelExecuted = false;
 let micropython: MicroPythonInstance | null = null;
 let projectFilesystem: RuntimeProjectFilesystem | null = null;
 let activeDeviceHost: DeviceHost | null = null;
@@ -88,9 +93,10 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
 
   switch (message.type) {
     case "start":
-      void startRuntime(message.deviceInputs, message.debuggerChannel, message.connectionGraph, message.project, message.filesystemGate);
+      void startRuntime(message.deviceInputs, message.debuggerChannel, message.connectionGraph, message.project, message.filesystemGate, message.runtimeProfile);
       break;
     case "input":
+      if (modelRuntime) { postError("Model runtime does not accept REPL input"); break; }
       if (scriptExecuting || queuedInputCharacters + message.data.length > MAX_SCRIPT_CHARACTERS) { postError("Runtime input queue is busy or full."); break; }
       queuedInputCharacters += message.data.length;
       inputQueue = inputQueue.then(() => processInput(message.data, message.requestId)).finally(() => { queuedInputCharacters -= message.data.length; });
@@ -114,6 +120,7 @@ async function startRuntime(
   requestedConnectionGraph?: ConnectionGraphV1,
   project: ProjectSnapshot = { version: 1, entries: [] },
   filesystemGate?: SharedArrayBuffer,
+  runtimeProfile?: ArmRuntimeProfile,
 ): Promise<void> {
   if (micropython !== null || starting) {
     postError("MicroPythonランタイムは既に起動しています。");
@@ -122,6 +129,10 @@ async function startRuntime(
 
   starting = true;
   try {
+    if (runtimeProfile !== undefined) {
+      await startArmRuntime(runtimeProfile, project, filesystemGate);
+      return;
+    }
     const sharedInputs =
       deviceInputs === undefined
         ? null
@@ -371,6 +382,23 @@ async function startRuntime(
   }
 }
 
+async function startArmRuntime(profile: ArmRuntimeProfile, project: ProjectSnapshot, gate?: SharedArrayBuffer): Promise<void> {
+  const checked = snapshotArmProfile(profile);
+  if (localDeviceBundle !== null || !self.crossOriginIsolated) throw new Error("Arm control requires the isolated managed runtime");
+  modelRuntime = true;
+  const stdout = new TextDecoder(), stderr = new TextDecoder();
+  micropython = await loadMicroPython({ heapsize: 1024 * 1024, linebuffer: false,
+    stdout: bytes => { if (!output.exhausted) postOutput("stdout", stdout.decode(bytes, { stream: true })); },
+    stderr: bytes => { if (!output.exhausted) postOutput("stderr", stderr.decode(bytes, { stream: true })); } });
+  projectFilesystem = new RuntimeProjectFilesystem(micropython.FS, project, gate,
+    (snapshot, revision, checkpoint) => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "filesystem", project: snapshot, revision, checkpoint }));
+  micropython.runPython("__import__('sys').path[:] = ['/project', '/project/lib']");
+  armBridge = new ArmPythonBridge(checked); armBridge.install(micropython);
+  const sys = micropython.pyimport<{ version: unknown }>("sys");
+  postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "ready", capabilities: ["arm-control-v1"], micropythonVersion: String(sys.version),
+    runtimeBuild: { sourceVersion: MICROPYTHON_SOURCE_VERSION, sourceCommit: MICROPYTHON_SOURCE_COMMIT, variant: MICROPYTHON_BUILD_VARIANT } });
+}
+
 async function processInput(data: string, requestId: string): Promise<void> {
   if (replResetRequested) return;
   if (micropython === null) {
@@ -435,10 +463,12 @@ async function processScript(
     return;
   }
 
+  if (modelRuntime && (mode !== "run" || modelExecuted)) { postExecutionResult(requestId, false, "A fresh arm runtime is required for each execution"); return; }
   output.beginOperation();
   projectFilesystem?.beginOperation();
   scriptExecuting = true;
   try {
+    if (armBridge) { modelExecuted = true; armBridge.begin(); }
     if (mode === "debug") {
       if (debuggerChannel === null) {
         throw new Error("デバッグ実行にはクロスオリジン分離が必要です。");
@@ -457,6 +487,7 @@ async function processScript(
     projectFilesystem?.flush(true);
     postExecutionResult(requestId, false, formatError(error));
   } finally {
+    armBridge?.end();
     scriptExecuting = false;
     activeDebuggerRequestId = null;
   }

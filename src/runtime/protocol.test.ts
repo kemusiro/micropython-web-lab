@@ -272,3 +272,17 @@ describe("isWorkerToMainMessage", () => {
     expect(isWorkerToMainMessage(null)).toBe(false);
   });
 });
+
+it("requires an explicit supported arm profile and rejects mixed board configurations", async () => {
+  const { SharedArmChannel, CONTROL_VERSION } = await import("../control/channel");
+  const { DEFAULT_ARM_CONTROL } = await import("../physics/arm-control");
+  const channel = SharedArmChannel.create(1);
+  const runtimeProfile = { kind: "arm", version: CONTROL_VERSION, identity: { setId: "set", generation: 1, runId: "run" }, conditions: DEFAULT_ARM_CONTROL, buffer: channel.buffer };
+  const start = { type: "start", version: RUNTIME_PROTOCOL_VERSION, runtimeProfile };
+  expect(isMainToWorkerMessage(start)).toBe(true);
+  expect(isMainToWorkerMessage({ ...start, connectionGraph: {} })).toBe(false);
+  expect(isMainToWorkerMessage({ ...start, deviceInputs: {} })).toBe(false);
+  expect(isMainToWorkerMessage({ ...start, runtimeProfile: { ...runtimeProfile, kind: "unknown" } })).toBe(false);
+  expect(isMainToWorkerMessage({ ...start, runtimeProfile: { ...runtimeProfile, version: 77 } })).toBe(false);
+  expect(isMainToWorkerMessage({ ...start, version: 15 })).toBe(false);
+});

@@ -1,3 +1,4 @@
+import { snapshotArmProfile, type ArmRuntimeProfile } from "../control/channel";
 import { MAX_RUNTIME_OUTPUT_CHARACTERS } from "./output-buffer";
 import {
   RUNTIME_PROTOCOL_VERSION,
@@ -36,6 +37,7 @@ export interface RuntimeWorker {
 export type RuntimeWorkerFactory = () => RuntimeWorker;
 
 export interface RuntimeClientOptions {
+  runtimeProfile?: ArmRuntimeProfile;
   /** Alpha defaults to no time limit. A positive integer enables the host watchdog. */
   executionLimitMs?: number | null;
   project?: ProjectSnapshot;
@@ -45,6 +47,8 @@ export interface RuntimeClientOptions {
 }
 
 export class RuntimeClient {
+  readonly #runtimeProfile: ArmRuntimeProfile | undefined;
+  #modelStarted = false;
   #project: ProjectSnapshot | undefined;
   #filesystemGate: Int32Array | undefined;
   #filesystemRevision = 0;
@@ -77,6 +81,8 @@ export class RuntimeClient {
     if (executionLimitMs !== null && (!Number.isInteger(executionLimitMs) || executionLimitMs < 1 || executionLimitMs > 2_147_483_647)) {
       throw new RangeError("Execution limit must be null or an integer from 1 to 2147483647 ms.");
     }
+    this.#runtimeProfile = options.runtimeProfile === undefined ? undefined : snapshotArmProfile(options.runtimeProfile);
+    if (this.#runtimeProfile && (options.connectionGraph || options.deviceInputs || options.debuggerChannel)) throw new Error("Model and board configuration cannot be combined");
     this.#executionLimitMs = executionLimitMs;
     this.#handlers = handlers;
     this.#workerFactory = workerFactory;
@@ -91,6 +97,8 @@ export class RuntimeClient {
   }
 
   start(): void {
+    if (this.#runtimeProfile && this.#modelStarted) throw new Error("Create a fresh model Worker pair to restart");
+    this.#modelStarted = true;
     this.#unexpectedWorkerFailureTimes = [];
     this.#startWorker();
   }
@@ -167,6 +175,7 @@ export class RuntimeClient {
       }
 
       if (event.data.type === "ready") {
+        if (this.#runtimeProfile && !event.data.capabilities?.includes("arm-control-v1")) { this.#reportClientError("Worker lacks arm-control-v1 capability"); return; }
         this.#clearOperation();
         this.#setStatus("ready");
       } else if (event.data.type === "execution-result") {
@@ -237,6 +246,7 @@ export class RuntimeClient {
     worker.postMessage({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      ...(this.#runtimeProfile ? { runtimeProfile: this.#runtimeProfile } : {}),
       ...(this.#project === undefined ? {} : { project: this.#project }),
       ...(this.#filesystemGate === undefined ? {} : { filesystemGate: this.#filesystemGate.buffer as SharedArrayBuffer }),
       ...(this.#deviceInputs === undefined
@@ -262,6 +272,7 @@ export class RuntimeClient {
   }
 
   setConnectionGraph(connectionGraph: ConnectionGraphV1): void {
+    if (this.#runtimeProfile) throw new Error("Model runtime cannot use a board graph");
     this.#connectionGraph = connectionGraph;
   }
 
@@ -271,6 +282,7 @@ export class RuntimeClient {
   }
 
   sendInput(data: string): boolean {
+    if (this.#runtimeProfile) return false;
     if (this.#worker === null || this.#status !== "ready") {
       return false;
     }
@@ -290,6 +302,7 @@ export class RuntimeClient {
   }
 
   executeScript(source: string, mode: ScriptExecutionMode = "run", path?: string): boolean {
+    if (this.#runtimeProfile && mode !== "run") return false;
     if (this.#worker === null || this.#status !== "ready" || this.#activeOperation !== null) {
       return false;
     }
@@ -392,6 +405,7 @@ export class RuntimeClient {
   }
 
   #recoverFromLimit(message: string): void {
+    if (this.#runtimeProfile) { this.#reportClientError(message); this.#discardWorker(); return; }
     this.#handlers.onMessage({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "error",
@@ -401,6 +415,7 @@ export class RuntimeClient {
   }
 
   #recoverFromUnexpectedWorkerFailure(detail: string, fallback: string): void {
+    if (this.#runtimeProfile) { this.#reportClientError(detail || fallback); this.#discardWorker(); return; }
     const now = Date.now();
     this.#unexpectedWorkerFailureTimes = this.#unexpectedWorkerFailureTimes.filter(
       (failedAt) => now - failedAt < UNEXPECTED_WORKER_RECOVERY_WINDOW_MS,

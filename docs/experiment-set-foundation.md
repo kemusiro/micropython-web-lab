@@ -73,4 +73,11 @@ DOM非依存の一軸アームモデルを`src/physics`へ追加した。慣性�
 参照4ケース、刻み幅半減、NodeとChromiumの数値差を検査する。
 通常画面の「準備中」は維持し、参照計算をMicroPythonでの実行として扱わない。
 詳細は[物理モデル](arm-physics.md)と[ADR 0053](adr/0053-add-a-deterministic-one-axis-arm-model.md)を参照する。
-次はE4でMicroPythonとの同期実行を実証し、E5でアームと時系列グラフへ接続する。
+
+## E4の同期実行基盤
+
+既存の制限付きWASMから、許可した`weblab.control`と版付き共有領域を介してSimulation Workerを進める。
+参照4ケースを実際のPythonで実行し、E3と全観測を比較した。起動・通信期限、世代、停止、再実行、
+非分離環境、権限、ファイル回収も検証する。Runtime Protocolは16へ更新し、保存形式は変更しない。
+詳細は[実行基盤](arm-runtime.md)と[ADR 0054](adr/0054-connect-micropython-to-a-simulation-worker.md)を参照する。
+次はE5で通常画面の保存・カタログ、アームの動作と時系列グラフへ接続する。

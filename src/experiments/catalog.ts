@@ -1,18 +1,14 @@
-import artifacts from "../../runtime/micropython/artifacts.sha256?raw";
-import versions from "../../runtime/micropython/versions.env?raw";
 import { MANAGED_CONNECTION_GRAPH, MANAGED_DEVICE_CATALOG_GRAPH } from "../connections/managed-connection-graph";
 import { FIRST_EXPERIMENT_SOURCE } from "../examples/first-experiment";
 import { deviceExampleSource } from "../examples/device-examples";
 import { YM2203_SCORE_EXAMPLE_SOURCE } from "../examples/ym2203-example";
 import { prepareYm2203Library } from "../examples/ym2203-library";
 import { ProjectFiles } from "../project/filesystem";
-import { createExperiment, type ExperimentSet, type RuntimeReference } from "./record";
+import { createExperiment, type ExperimentSet } from "./record";
 import type { SupportedLocale } from "../i18n/i18n";
 
-const version = /^MICROPYTHON_VERSION=(.+)$/m.exec(versions)?.[1];
-const buildHash = /^([a-f0-9]{64}) +src\/vendor\/micropython-build\/micropython.wasm$/m.exec(artifacts)?.[1];
-if (!version || !buildHash) throw new Error("Missing pinned runtime metadata");
-export const MANAGED_EXPERIMENT_RUNTIME: RuntimeReference = Object.freeze({ id: "web-lab-restricted", version, buildHash });
+import { MANAGED_EXPERIMENT_RUNTIME } from "../runtime/build-reference";
+export { MANAGED_EXPERIMENT_RUNTIME } from "../runtime/build-reference";
 export type TemplateId = "led-blink" | "button-input" | "button-led" | "device-lab" | "ym2203";
 export type CategoryId = "devices" | "physical" | "sound" | "learn" | "books";
 type Copy = readonly [string, string];
