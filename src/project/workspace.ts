@@ -2,17 +2,21 @@ import { ProjectFiles, projectPath, type ProjectSnapshot } from "./filesystem";
 import { ProjectStore, type StoredProject } from "./project-store";
 import type { EditorWorkspaceTab } from "./editor-draft";
 import { hasUnsavedEditorChanges } from "./editor-file-state";
+import { snapshotStoredProject, type ProjectPersistence } from "./project-state";
 
 export class ProjectWorkspace {
   readonly files = new ProjectFiles();
   readonly #persistedFiles = new ProjectFiles();
-  #store: ProjectStore | null;
+  #store: ProjectPersistence | null;
   #loaded = false;
   restored = false;
-  constructor() { this.#store = typeof indexedDB === "undefined" ? null : new ProjectStore(); }
+  constructor(store: ProjectPersistence | null = typeof indexedDB === "undefined" ? null : new ProjectStore()) {
+    this.#store = store;
+  }
   async load(tabs: EditorWorkspaceTab[], activeTabId: string, legacySavedAt = ""): Promise<StoredProject> {
     if (!this.#store) throw new Error("IndexedDB is unavailable / ブラウザ保存が利用できません");
-    const stored = await this.#store.load();
+    const loaded = await this.#store.load();
+    const stored = loaded === undefined ? undefined : snapshotStoredProject(loaded);
     if (stored) {
       this.#persistedFiles.replace(stored.filesystem);
       this.files.replace(stored.filesystem); this.#loaded = true; this.restored = true;
@@ -30,7 +34,7 @@ export class ProjectWorkspace {
     return hasUnsavedEditorChanges(tab, tab.path ? this.#persistedFiles.get(tab.path) : undefined);
   }
   stageTabs(tabs: EditorWorkspaceTab[], activeTabId: string, assignLegacyPaths = false): StoredProject {
-    if (!assignLegacyPaths) return { version: 1, filesystem: this.files.snapshot(), tabs: tabs.map(tab => ({ ...tab })), activeTabId };
+    if (!assignLegacyPaths) return snapshotStoredProject({ version: 1, filesystem: this.files.snapshot(), tabs, activeTabId });
     const next = new ProjectFiles(this.files.snapshot());
     const updated = tabs.map(tab => {
       let path = tab.path;
@@ -49,19 +53,21 @@ export class ProjectWorkspace {
       next.write(path, new TextEncoder().encode(tab.source));
       return { ...tab, path };
     });
-    this.files.replace(next.snapshot());
-    return { version: 1, filesystem: this.files.snapshot(), tabs: updated, activeTabId };
+    const staged = snapshotStoredProject({ version: 1, filesystem: next.snapshot(), tabs: updated, activeTabId });
+    this.files.replace(staged.filesystem);
+    return staged;
   }
   async save(tabs: EditorWorkspaceTab[], activeTabId: string): Promise<void> {
     if (!this.#store || !this.#loaded) throw new Error("Project storage is unavailable / ブラウザ保存が利用できません");
-    const snapshot = this.files.snapshot();
-    await this.#store.save({ version: 1, filesystem: snapshot, tabs, activeTabId });
-    this.#persistedFiles.replace(snapshot);
+    const staged = this.stageTabs(tabs, activeTabId);
+    await this.#store.save(staged);
+    this.#persistedFiles.replace(staged.filesystem);
   }
   async replace(snapshot: ProjectSnapshot, tabs: EditorWorkspaceTab[], activeTabId: string): Promise<void> {
     if (!this.#store || !this.#loaded) throw new Error("Project storage is unavailable");
-    await this.#store.save({ version: 1, filesystem: snapshot, tabs, activeTabId });
-    this.#persistedFiles.replace(snapshot);
-    this.files.replace(snapshot);
+    const staged = snapshotStoredProject({ version: 1, filesystem: snapshot, tabs, activeTabId });
+    await this.#store.save(staged);
+    this.#persistedFiles.replace(staged.filesystem);
+    this.files.replace(staged.filesystem);
   }
 }
