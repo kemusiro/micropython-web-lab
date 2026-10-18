@@ -86,8 +86,9 @@ Device order and collapsed cards are saved per set. Multiline input visibility r
 Choose a topic offers Explore devices, Robots and control, Create sound and music, Learn programming,
 and Learn with books. Topics may appear in several categories. Current sets cover LED blinking, button
 input, button-to-LED control, a general device lab and YM2203. Arm physics and book material are in
-preparation. Saved sets reopens your work; Create another makes an independent copy of the bundled
-template. Experience, Setup and Explanation views expose each topic's controls. Name and backup allows
+preparation. A standalone arm physics model has been verified, but is not yet connected to the UI
+or Python; see [model scope and validation (Japanese)](docs/arm-physics.md).
+Use Saved sets to reopen your work; Create another makes an independent copy of the bundled template. Experience, Setup and Explanation views expose each topic's controls. Name and backup allows
 renaming and recovery downloads. Template updates never overwrite your copies.
 
 ZIP transfer handles the current set's saved files. Download recovery data produces JSON containing
