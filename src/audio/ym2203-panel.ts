@@ -208,7 +208,10 @@ export class YmAudioPanel {
     this.#acceptMeters = false;
     this.#audio.stop(); this.clearMeters();
   }
-  async close(): Promise<void> { this.stop(); await this.#audio.close(); }
+  async close(): Promise<void> {
+    this.#revision++; this.#preparing = null; this.#loading = false; this.#muted = true;
+    this.stop(); await this.#audio.close();
+  }
   private text(ja: string, en: string): string { return this.locale === "ja" ? ja : en; }
   private status(): void {
     const root = this.#root;

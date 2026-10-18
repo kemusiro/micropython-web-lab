@@ -21,6 +21,7 @@ export interface ExperimentContent {
     readonly id: "devices-v1";
     readonly section: "experience" | "configuration" | "explanation";
     readonly deviceOrder: readonly string[];
+    readonly collapsedDevices?: readonly string[];
   };
   readonly configurationDraft?: ConnectionGraphV1;
 }
@@ -89,13 +90,20 @@ export function snapshotExperiment(value: unknown): ExperimentSet {
       !Array.isArray(view.deviceOrder) || view.deviceOrder.length > 64) throw new Error("Invalid experiment view");
   const deviceOrder = Array.from(view.deviceOrder, recordIdentifier);
   if (new Set(deviceOrder).size !== deviceOrder.length) throw new Error("Duplicate device order");
+  let collapsedDevices: string[] | undefined;
+  if (view.collapsedDevices !== undefined) {
+    if (!Array.isArray(view.collapsedDevices) || view.collapsedDevices.length > 64) throw new Error("Invalid collapsed devices");
+    collapsedDevices = Array.from(view.collapsedDevices, recordIdentifier);
+    if (new Set(collapsedDevices).size !== collapsedDevices.length) throw new Error("Duplicate collapsed devices");
+  }
   return {
     recordVersion: 1, id: recordIdentifier(v.id), revision: v.revision as number,
     title: text(v.title, 120), createdAt: date(v.createdAt), savedAt: date(v.savedAt), origin: originCopy,
     runtimeRef: { id: recordIdentifier(runtime.id), version: text(runtime.version, 80), buildHash: hash(runtime.buildHash) },
     filesystem: project.filesystem, editor: { tabs: project.tabs, activeTabId: project.activeTabId }, environment,
     initialConditions: { inputs: inputCopy }, runPolicy: { kind: "interactive" },
-    view: { id: "devices-v1", section: view.section as ExperimentSet["view"]["section"], deviceOrder },
+    view: { id: "devices-v1", section: view.section as ExperimentSet["view"]["section"], deviceOrder,
+      ...(collapsedDevices === undefined ? {} : { collapsedDevices }) },
     ...(v.configurationDraft === undefined ? {} : {
       configurationDraft: snapshotBoardGraph(v.configurationDraft),
     }),

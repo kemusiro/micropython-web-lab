@@ -23,6 +23,9 @@ export class ExperimentCoordinator {
   #locked = false;
   #tail: Promise<void> = Promise.resolve();
   #saveFailure: unknown;
+  #pending: { record: ExperimentSet; session: ExperimentSession;
+    waiters: { resolve(): void; reject(error: unknown): void }[] } | undefined;
+  #draining = false;
   phase: ExperimentPhase = "idle";
   error: unknown;
 
@@ -34,6 +37,11 @@ export class ExperimentCoordinator {
   isCurrent(session: ExperimentSession): boolean {
     return session.setId === this.#current.id && session.generation === this.#generation;
   }
+  rename(title: string): Promise<void> {
+    if (this.#locked) return Promise.reject(new Error("Experiment is locked"));
+    this.#current = snapshotExperiment({ ...this.#current, title });
+    return this.save(this.#current, this.session);
+  }
 
   /** Capture at enqueue time; serialize writes with the current committed revision. */
   save(content: ExperimentContent, session: ExperimentSession): Promise<void> {
@@ -41,16 +49,35 @@ export class ExperimentCoordinator {
     const stamp = Object.freeze({ ...session });
     const captured = applyExperimentContent(this.#current, content);
     this.#current = captured;
-    const saving = this.#tail.then(async () => {
-      if (!this.isCurrent(stamp)) throw new Error("Obsolete experiment session");
-      const committed = await this.store.save(snapshotExperiment({ ...captured, revision: this.#current.revision }));
-      if (!this.isCurrent(stamp)) throw new Error("Obsolete experiment save completion");
-      // Newer queued editor changes remain in memory while the committed revision advances.
-      this.#current = snapshotExperiment({ ...this.#current, revision: committed.revision, savedAt: committed.savedAt });
-      this.#saveFailure = undefined;
+    const saving = new Promise<void>((resolve, reject) => {
+      const waiters = this.#pending?.waiters ?? [];
+      waiters.push({ resolve, reject });
+      // Retain at most one active and one pending filesystem snapshot.
+      this.#pending = { record: captured, session: stamp, waiters };
     });
-    this.#tail = saving.catch(error => { this.#saveFailure = error; });
+    if (!this.#draining) this.#tail = this.drainSaves();
     return saving;
+  }
+
+  private async drainSaves(): Promise<void> {
+    this.#draining = true;
+    while (this.#pending) {
+      const pending = this.#pending;
+      this.#pending = undefined;
+      try {
+        if (!this.isCurrent(pending.session)) throw new Error("Obsolete experiment session");
+        const committed = await this.store.save(snapshotExperiment({ ...pending.record, revision: this.#current.revision }));
+        if (!this.isCurrent(pending.session)) throw new Error("Obsolete experiment save completion");
+        // Newer queued changes remain in memory while the committed revision advances.
+        this.#current = snapshotExperiment({ ...this.#current, revision: committed.revision, savedAt: committed.savedAt });
+        this.#saveFailure = undefined;
+        for (const waiter of pending.waiters) waiter.resolve();
+      } catch (error) {
+        this.#saveFailure = error;
+        for (const waiter of pending.waiters) waiter.reject(error);
+      }
+    }
+    this.#draining = false;
   }
 
   async switchTo(target: { kind: "saved"; id: string } | { kind: "new"; record: ExperimentSet }, signal?: AbortSignal): Promise<void> {
@@ -106,7 +133,7 @@ export class ExperimentCoordinator {
 /** Bind each ProjectWorkspace to one session; late saves cannot follow the active pointer. */
 export class ExperimentProjectPersistence implements ProjectPersistence {
   readonly session: ExperimentSession;
-  constructor(readonly coordinator: ExperimentCoordinator, session = coordinator.session) {
+  constructor(readonly coordinator: ExperimentCoordinator, session = coordinator.session, readonly capture?: () => ExperimentContent) {
     this.session = Object.freeze({ ...session });
   }
   async load(): Promise<StoredProject> {
@@ -114,7 +141,8 @@ export class ExperimentProjectPersistence implements ProjectPersistence {
     return experimentProject(this.coordinator.current);
   }
   async save(value: StoredProject): Promise<void> {
-    await this.coordinator.save({ ...this.coordinator.current, filesystem: value.filesystem,
+    if (!this.coordinator.isCurrent(this.session)) throw new Error("Obsolete project workspace");
+    await this.coordinator.save({ ...(this.capture?.() ?? this.coordinator.current), filesystem: value.filesystem,
       editor: { tabs: value.tabs, activeTabId: value.activeTabId } }, this.session);
   }
 }

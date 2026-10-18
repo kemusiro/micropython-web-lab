@@ -15,6 +15,16 @@ import {
 } from "./shared-device-inputs";
 
 describe("SharedDeviceInputs", () => {
+  it("restores initial inputs and drops queued bytes when a terminated experiment is replaced", () => {
+    const inputs = SharedDeviceInputs.create(WEB_LAB_DEVICE_INPUT_LAYOUT)!;
+    inputs.setScalar(BUTTON_PRESSED_INPUT_ID, 1);
+    inputs.setScalar(ANALOG_VALUE_INPUT_ID, 123);
+    inputs.enqueue(UART_RECEIVE_INPUT_ID, new Uint8Array([42]));
+    inputs.reset();
+    expect(inputs.readScalar(BUTTON_PRESSED_INPUT_ID).value).toBe(0);
+    expect(inputs.readScalar(ANALOG_VALUE_INPUT_ID).value).toBe(DEFAULT_ANALOG_INPUT_VALUE);
+    expect(inputs.dequeue(UART_RECEIVE_INPUT_ID, 8).data).toHaveLength(0);
+  });
   it("shares independently versioned scalar values", () => {
     const mainInputs = SharedDeviceInputs.create(WEB_LAB_DEVICE_INPUT_LAYOUT)!;
     const workerInputs = SharedDeviceInputs.attach(

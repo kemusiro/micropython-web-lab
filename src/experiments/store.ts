@@ -93,6 +93,7 @@ export class ExperimentStore implements ExperimentPersistence {
     environment: ExperimentEnvironment;
     runtimeRef: RuntimeReference;
     view?: ExperimentSet["view"];
+    freshRecord?: ExperimentSet;
     journal?: { tabs: StoredProject["tabs"]; activeTabId: string; savedAt: string };
     title?: string;
   }): Promise<ExperimentSet> {
@@ -103,6 +104,7 @@ export class ExperimentStore implements ExperimentPersistence {
     const base = createExperiment(fallback, options.environment, { title: options.title ?? "これまでの作業",
       origin: { kind: "legacy", source: "project-v1" }, runtimeRef: options.runtimeRef });
     const candidate = options.view === undefined ? base : snapshotExperiment({ ...base, view: options.view });
+    const fresh = options.freshRecord === undefined ? undefined : snapshotExperiment(options.freshRecord);
     return this.#transaction("readwrite", (state, tx) => {
       if (state.workspace) return requireSet(state.sets, state.workspace.selectedSetId);
       if (state.sets.length) throw new Error("Unlinked experiment records require recovery");
@@ -114,7 +116,7 @@ export class ExperimentStore implements ExperimentPersistence {
         });
         project.activeTabId = journal.activeTabId;
       }
-      const record = snapshotExperiment({ ...candidate, filesystem: project.filesystem,
+      const record = state.legacy === undefined && fresh ? fresh : snapshotExperiment({ ...candidate, filesystem: project.filesystem,
         editor: { tabs: project.tabs, activeTabId: project.activeTabId } });
       checkExperimentQuota([], [experimentBytes(record)]);
       tx.objectStore("experimentSets").put(record, record.id);
@@ -132,6 +134,15 @@ export class ExperimentStore implements ExperimentPersistence {
       this.#quota(state.sets, [next]);
       tx.objectStore("experimentSets").put(next, next.id);
       return next;
+    });
+  }
+  remove(id: string, revision: number): Promise<void> {
+    recordIdentifier(id);
+    return this.#transaction("readwrite", (state, tx) => {
+      const record = requireSet(state.sets, id);
+      if (record.revision !== revision) throw new ExperimentConflictError();
+      if (state.workspace?.selectedSetId === id) throw new Error("Switch away before deleting the current set");
+      tx.objectStore("experimentSets").delete(id);
     });
   }
 

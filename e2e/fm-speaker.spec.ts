@@ -58,6 +58,9 @@ test("mute and slider are independent, shared with the editor, and do not reset 
 test("restored connections prepare while suspended and reconnecting starts muted at the previous slider value", async ({ page }) => {
   await page.addInitScript(() => {
     const NativeAudioContext = window.AudioContext;
+    let activated = false;
+    window.addEventListener("pointerdown", () => { activated = true; }, true);
+    window.addEventListener("keydown", () => { activated = true; }, true);
     window.AudioContext = class extends NativeAudioContext {
       constructor(options?: AudioContextOptions) {
         super(options);
@@ -66,7 +69,7 @@ test("restored connections prepare while suspended and reconnecting starts muted
       }
       resume() {
         // Simulate the autoplay gate while using a real context/worklet/core.
-        if (localStorage.getItem("test-block-autoplay") && !navigator.userActivation.isActive) return new Promise<void>(() => {});
+        if (localStorage.getItem("test-block-autoplay") && !activated) return new Promise<void>(() => {});
         return super.resume();
       }
     };

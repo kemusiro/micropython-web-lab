@@ -146,6 +146,20 @@ describe("experiment switching coordinator", () => {
     expect(s.coordinator.current.revision).toBe(3);
   });
 
+  it("bounds pending snapshots during slow storage and resolves coalesced callers after the latest commit", async () => {
+    const s = setup();
+    const pending = deferred();
+    s.store.save.mockImplementationOnce(async record => { await pending.promise; return snapshotExperiment({ ...record, revision: 2 }); });
+    const saves = [s.coordinator.save(makeExperiment("first", "active"), s.coordinator.session)];
+    for (let index = 0; index < 100; index++) saves.push(s.coordinator.save(makeExperiment("first", `buffer-${index}`), s.coordinator.session));
+    expect(s.store.save).toHaveBeenCalledTimes(1);
+    pending.resolve();
+    await Promise.all(saves);
+    expect(s.store.save.mock.calls.map(([record]) => record.editor.tabs[0]!.source)).toEqual(["active", "buffer-99"]);
+    expect(s.coordinator.current.editor.tabs[0]!.source).toBe("buffer-99");
+    expect(s.coordinator.current.revision).toBe(3);
+  });
+
   it("keeps the running source if draining a failed autosave cannot establish a safe switch", async () => {
     const s = setup();
     s.store.save.mockRejectedValueOnce(new Error("save failure"));

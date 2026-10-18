@@ -81,17 +81,23 @@ for (const [navigation, locale] of [["reload", "ja"], ["reopen", "ja"], ["reload
   });
 }
 
-async function openButtonExperiment(page: Page, url = "/"): Promise<void> {
+async function openButtonExperiment(page: Page, url = "/", inputAvailable = true): Promise<void> {
   await page.goto(url);
   const editor = page.locator("#code-editor");
   const run = page.locator("#run-script-button");
   await expect(run).toBeEnabled();
+  if (await page.locator("body").getAttribute("data-app-screen") === "workspace") {
+    await page.locator("#open-experiment-button").click();
+    await expect(page.locator("body")).toHaveAttribute("data-app-screen", "experiment");
+  }
   await run.click();
   await expect(page.locator("#experiment-step")).toContainText("2 / 2");
   await editor.fill((await editor.inputValue()).replace("interval_ms = 500", "interval_ms = 200"));
   await run.click();
   await expect(page.locator("#experiment-step")).toHaveText("実験完了");
   await page.locator("#experiment-button-example").click();
+  await expect(page.locator("body")).toHaveAttribute("data-experiment-topic", "button");
+  if (inputAvailable) await expect(run).toBeEnabled();
 }
 
 test("keeps the button experiment attached to its restored tab instead of an older workspace tab", async ({ page }) => {
@@ -116,6 +122,8 @@ test("keeps the button experiment attached to its restored tab instead of an old
   await run.click();
   await expect(page.locator("#experiment-step")).toHaveText("実験完了");
   await page.locator("#experiment-button-example").click();
+  await expect(page.locator("body")).toHaveAttribute("data-experiment-topic", "button");
+  await expect(run).toBeEnabled();
   const buttonSource = (await editor.inputValue()) + "\n# retained button experiment";
   await editor.fill(buttonSource);
   await expect(page.locator("#draft-status")).toHaveAttribute("data-state", "saved");
@@ -132,7 +140,7 @@ test("keeps the button experiment attached to its restored tab instead of an old
   await page.locator("#open-experiment-button").click();
   await run.click();
   await expect(page.locator("#experiment-step")).toContainText("2 / 2");
-  await editor.fill((await editor.inputValue()).replace("interval_ms = 500", "interval_ms = 200"));
+  await editor.fill((await editor.inputValue()).replace("interval_ms = 200", "interval_ms = 100"));
   await run.click();
   await expect(page.locator("#experiment-step")).toHaveText("実験完了");
   await page.locator("#experiment-button-example").click();
@@ -142,11 +150,12 @@ test("keeps the button experiment attached to its restored tab instead of an old
   await expect(page.locator("#experiment-output")).toContainText("Button: pressed");
   await expect(page.locator("#experiment-feedback")).toContainText("押す・離す入力を確認できました");
   await page.locator("#open-workspace-button").click();
-  await page.getByRole("tab", { name: "main.py", exact: true }).click();
+  await page.locator("#experiment-saved").click();
+  await page.locator("[data-saved-experiment]").filter({ has: page.getByRole("heading", { name: "これまでの作業", exact: true }) }).getByRole("button", { name: "開く", exact: true }).click();
   await expect(editor).toHaveValue(music);
 });
 
-test("opens a real button sample when an old button screen preference points at unrelated code", async ({ page }) => {
+test("retains unrelated legacy code instead of treating an old button preference as an experiment", async ({ page }) => {
   const music = '# YM2203 playback workspace\nprint("my YM2203 playback")';
   await page.addInitScript(source => {
     localStorage.setItem("micropython-web-lab:app-screen:v1", "experiment");
@@ -159,13 +168,11 @@ test("opens a real button sample when an old button screen preference points at 
   }, music);
   await page.goto("/");
   await expect(page.locator("#run-script-button")).toBeEnabled();
-  await expect(page.locator("#code-editor")).toHaveValue(/button = Pin\(15, Pin.IN, Pin.PULL_UP\)/);
-  await page.locator("#open-workspace-button").click();
-  await page.getByRole("tab", { name: "main.py", exact: true }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-app-screen", "workspace");
   await expect(page.locator("#code-editor")).toHaveValue(music);
 });
 
-test("returns to the workspace if a missing button experiment cannot get a free editor tab", async ({ page }) => {
+test("preserves all 24 legacy tabs and opens a guided set without consuming their tab limit", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("micropython-web-lab:app-screen:v1", "experiment");
     localStorage.setItem("micropython-web-lab:experiment-topic:v1", "button");
@@ -181,7 +188,13 @@ test("returns to the workspace if a missing button experiment cannot get a free 
   await expect(page.locator("body")).toHaveAttribute("data-app-screen", "workspace");
   await expect(page.locator("#code-editor")).toHaveValue("print(0)");
   await expect(page.locator("#editor-tabs .editor-tab")).toHaveCount(24);
-  await expect(page.locator("#draft-status")).toContainText("24");
+  await page.locator("#open-experiment-button").click();
+  await expect(page.locator("#code-editor")).toHaveValue(/interval_ms = 500/);
+  await expect(page.locator("#editor-tabs .editor-tab")).toHaveCount(1);
+  await page.locator("#open-workspace-button").click();
+  await page.locator("#experiment-saved").click();
+  await page.locator("[data-saved-experiment]").filter({ has: page.getByRole("heading", { name: "これまでの作業", exact: true }) }).getByRole("button", { name: "開く", exact: true }).click();
+  await expect(page.locator("#editor-tabs .editor-tab")).toHaveCount(24);
 });
 
 for (const width of [1280, 390]) {
@@ -241,7 +254,7 @@ for (const width of [1280, 390]) {
     const source = await editor.inputValue();
     await page.locator("#experiment-finish-button").click();
     await expect(page.locator("body")).toHaveAttribute("data-app-screen", "workspace");
-    await expect(page.locator('[data-device-instance="analog-gp26"]')).toBeVisible();
+    await expect(page.locator('[data-device-instance="analog-gp26"]')).toHaveCount(0);
     await expect(page.locator("#terminal")).toContainText("Button: pressed");
     await expect(editor).toHaveValue(source);
     await page.locator("#open-experiment-button").click();
@@ -278,7 +291,7 @@ test("restores the button experiment and edited code in English and recovers fro
   await expect(page.locator("#device-ui-root > .device-ui-card:visible")).toHaveCount(1);
 });
 
-test("uses the existing button wiring and releases keyboard input when leaving the focused view", async ({ page }) => {
+test("keeps legacy wiring separate and releases keyboard input when leaving the focused view", async ({ page }) => {
   const graph = {
     ...MANAGED_CONNECTION_GRAPH,
     devices: MANAGED_CONNECTION_GRAPH.devices.map(device => device.instanceId === "button-gp15"
@@ -288,10 +301,10 @@ test("uses the existing button wiring and releases keyboard input when leaving t
   const saved = JSON.stringify({ schemaVersion: 1, savedAt: "2026-10-15T00:00:00.000Z", graph });
   await page.addInitScript(value => localStorage.setItem("micropython-web-lab:connection-project:v1", value), saved);
   await openButtonExperiment(page);
-  await expect(page.locator("#code-editor")).toHaveValue(/button = Pin\(13, Pin.IN, Pin.PULL_UP\)/);
-  await expect(page.locator("#experiment-instruction")).toContainText("GP13");
+  await expect(page.locator("#code-editor")).toHaveValue(/button = Pin\(15, Pin.IN, Pin.PULL_UP\)/);
+  await expect(page.locator("#experiment-instruction")).toContainText("GP15");
   await page.locator("#run-script-button").click();
-  const button = page.locator('[data-device-instance="button-gp15"]').getByRole("button", { name: "GP13", exact: true });
+  const button = page.locator('[data-device-instance="button-gp15"]').getByRole("button", { name: "GP15", exact: true });
   await button.focus();
   await page.keyboard.down("Space");
   await expect(page.locator("#experiment-output")).toContainText("Button: pressed");
@@ -303,7 +316,7 @@ test("uses the existing button wiring and releases keyboard input when leaving t
   await page.locator("#stop-button").click();
 });
 
-test("automatically connects a missing button and keeps the wiring editor in sync", async ({ page }) => {
+test("opens a wired button set while retaining the original disconnected legacy graph", async ({ page }) => {
   const graph = { ...MANAGED_CONNECTION_GRAPH, devices: MANAGED_CONNECTION_GRAPH.devices.filter(device => device.instanceId !== "button-gp15") };
   const saved = JSON.stringify({ schemaVersion: 1, savedAt: "2026-10-15T00:00:00.000Z", graph });
   await page.addInitScript(value => {
@@ -314,7 +327,7 @@ test("automatically connects a missing button and keeps the wiring editor in syn
   await expect(page.locator("#run-script-button")).toBeEnabled();
   await expect(page.locator("#code-editor")).toHaveValue(/button = Pin\(15,/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("micropython-web-lab:connection-project:v1")!).graph))
-    .toEqual(MANAGED_CONNECTION_GRAPH);
+    .toEqual(graph);
   await page.locator("#run-script-button").click();
   await page.getByRole("button", { name: "GP15", exact: true }).press("Space");
   await expect(page.locator("#experiment-output")).toContainText("Button: pressed");
@@ -326,14 +339,14 @@ test("automatically connects a missing button and keeps the wiring editor in syn
   await page.locator("#open-device-configuration").click();
   await expect(page.getByLabel("押しボタンを接続", { exact: true })).toBeChecked();
   await expect(page.getByRole("button", { name: "配線を適用" })).toBeDisabled();
-  await page.getByLabel("BME280環境センサーを接続").uncheck();
+  await page.getByLabel("BME280環境センサーを接続").check();
   await page.getByRole("button", { name: "配線を適用" }).click();
   await expect(page.locator("#run-script-button")).toBeEnabled();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("micropython-web-lab:connection-project:v1")!).graph.devices
-    .some((device: { instanceId: string }) => device.instanceId === "button-gp15"))).toBe(true);
+    .some((device: { instanceId: string }) => device.instanceId === "button-gp15"))).toBe(false);
 });
 
-test("automatically reconnects a missing button when restoring its experiment", async ({ page }) => {
+test("ignores obsolete legacy wiring after the button set has migrated", async ({ page }) => {
   await openButtonExperiment(page);
   const source = await page.locator("#code-editor").inputValue();
   await page.evaluate(() => {
@@ -351,7 +364,7 @@ test("automatically reconnects a missing button when restoring its experiment", 
 });
 
 for (const blockedStorage of [false, true]) {
-  test(`automatically chooses a free button GPIO with storage blocked=${blockedStorage}`, async ({ page }) => {
+  test(`keeps the new button set independent of legacy GPIO conflicts and storage blocked=${blockedStorage}`, async ({ page }) => {
     const graph = { ...MANAGED_CONNECTION_GRAPH, devices: MANAGED_CONNECTION_GRAPH.devices
       .filter(device => device.instanceId !== "button-gp15")
       .map(device => device.instanceId === "gt-502mgg-n" ? { ...device, ports: device.ports.map(port => port.portId === "pps"
@@ -370,9 +383,9 @@ for (const blockedStorage of [false, true]) {
     await expect(page.locator("#run-script-button")).toBeEnabled();
     const source = await page.locator("#code-editor").inputValue();
     const pin = /button = Pin\((\d+),/.exec(source)![1];
-    expect(pin).not.toBe("15");
+    expect(pin).toBe("15");
     await expect(page.locator("#experiment-instruction")).toContainText(`GP${pin}`);
-    if (blockedStorage) await expect(page.locator("#experiment-output")).toContainText("Test connection storage blocked");
+    await expect(page.locator("#experiment-output")).not.toContainText("Test connection storage blocked");
     await page.locator("#run-script-button").click();
     await page.getByRole("button", { name: `GP${pin}`, exact: true }).press("Space");
     await expect(page.locator("#experiment-output")).toContainText("Button: pressed");
@@ -395,7 +408,7 @@ test("keeps the button draft and workspace collapse state when the experiment is
   await expect(page.locator("#experiment-step")).toHaveText("実験完了");
   await page.locator("#experiment-button-example").click();
   await expect(editor).toHaveValue(source);
-  await expect(page.locator("#editor-tabs .editor-tab")).toHaveCount(2);
+  await expect(page.locator("#editor-tabs .editor-tab")).toHaveCount(1);
   await expect(page.locator("#device-ui-button-gp15-components")).toBeVisible();
   await page.locator("#run-script-button").click();
   await page.getByRole("button", { name: "GP15", exact: true }).press("Space");
@@ -412,7 +425,7 @@ test("explains unavailable synchronous input in the focused button screen", asyn
   const server = await browserFixture();
   try {
     server.setFault("isolation");
-    await openButtonExperiment(page, server.url);
+    await openButtonExperiment(page, server.url, false);
     await expect(page.locator("#run-script-button")).toBeDisabled();
     await expect(page.locator('[data-device-instance="button-gp15"] .device-ui-components button')).toBeDisabled();
     await expect(page.locator("#experiment-feedback")).toHaveText(await page.locator("#device-ui-input-status").textContent());
@@ -423,52 +436,34 @@ test("explains unavailable synchronous input in the focused button screen", asyn
   }
 });
 
-test("switches screens without resetting Python, drafts, or connections and reopens the experiment in a separate tab", async ({ page }) => {
-  const savedConnections = JSON.stringify({
-    schemaVersion: 1,
-    savedAt: "2026-10-10T00:00:00.000Z",
-    graph: {
-      ...MANAGED_CONNECTION_GRAPH,
-      devices: MANAGED_CONNECTION_GRAPH.devices.filter((device) => device.instanceId !== "spi-register-0"),
-    },
-  });
-  await page.addInitScript((saved) => {
-    if (localStorage.getItem("micropython-web-lab:connection-project:v1") === null) {
+test("browses without resetting Python and opens guided experiments as separate sets", async ({ page }) => {
+  const savedConnections = JSON.stringify({ schemaVersion: 1, savedAt: "2026-10-10T00:00:00.000Z", graph: MANAGED_CONNECTION_GRAPH });
+  await page.addInitScript(saved => {
+    if (localStorage.getItem("micropython-web-lab:connection-project:v1") === null)
       localStorage.setItem("micropython-web-lab:connection-project:v1", saved);
-    }
   }, savedConnections);
   await page.goto("/");
   const editor = page.locator("#code-editor");
   await expect(page.locator("#run-script-button")).toBeEnabled();
   const source = 'retained_value = 73\nprint("kept")';
-  await editor.fill(source);
-  await page.locator("#run-script-button").click();
-  await expect(page.locator("#experiment-feedback")).toContainText("LEDの点滅を確認できません");
-  await expect(page.locator("#experiment-step")).toContainText("1 / 2");
-  await page.locator("#open-workspace-button").click();
+  await editor.fill(source); await page.locator("#run-script-button").click();
+  await expect(page.locator("#terminal")).toContainText("kept");
   await page.locator("#repl-batch > summary").click();
-  await page.locator("#repl-input").fill("print(retained_value)");
-  await page.locator("#send-button").click();
-  await expect(page.locator("#terminal")).toContainText("73");
   await page.locator("#repl-input").fill("unfinished input");
-  const connectionBefore = await page.evaluate(() => localStorage.getItem("micropython-web-lab:connection-project:v1"));
-  expect(connectionBefore).toBe(savedConnections);
-  await page.locator("#open-experiment-button").click();
-  await expect(editor).toHaveValue(source); // The existing experiment tab is retained.
-  await page.locator("#open-workspace-button").click();
+  await page.locator("#experiment-browse").click();
+  await page.locator("#experiment-return").click();
   await expect(page.locator("#repl-input")).toHaveValue("unfinished input");
-  expect(await page.evaluate(() => localStorage.getItem("micropython-web-lab:connection-project:v1"))).toBe(connectionBefore);
-
-  // A pre-existing project without a preference defaults to the full workspace.
-  await page.evaluate(() => localStorage.removeItem("micropython-web-lab:app-screen:v1"));
-  await page.reload();
-  await expect(page.locator("body")).toHaveAttribute("data-app-screen", "workspace");
+  await page.locator("#repl-input").fill("print(retained_value)"); await page.locator("#send-button").click();
+  await expect(page.locator("#terminal")).toContainText("73");
   await page.locator("#open-experiment-button").click();
   await expect(editor).toHaveValue(/interval_ms = 500/);
-  await expect(page.locator("#editor-tabs .editor-tab")).toHaveCount(2);
+  await expect(page.locator("#editor-tabs .editor-tab")).toHaveCount(1);
   await page.locator("#open-workspace-button").click();
-  await page.getByRole("tab", { name: "main.py", exact: true }).click();
+  await page.locator("#experiment-saved").click();
+  await page.locator("[data-saved-experiment]").filter({ has: page.getByRole("heading", { name: "これまでの作業", exact: true }) }).getByRole("button", { name: "開く", exact: true }).click();
   await expect(editor).toHaveValue(source);
+  await expect(page.locator("#editor-tabs .editor-tab")).toHaveCount(1);
+  expect(await page.evaluate(() => localStorage.getItem("micropython-web-lab:connection-project:v1"))).toBe(savedConnections);
 });
 
 for (const viewport of [{ width: 1280, height: 600 }, { width: 390, height: 700 }, { width: 320, height: 700 }]) {

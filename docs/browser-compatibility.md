@@ -218,3 +218,17 @@ Windows 11実機で修正候補を手動確認する場合は、OSのビルド�
 - [Apple: Testing with WebDriver in Safari](https://developer.apple.com/documentation/webkit/testing-with-webdriver-in-safari)
 - [Mozilla geckodriver](https://github.com/mozilla/geckodriver/releases)
 - [Windows 2025ランナーの収録ソフトウェア](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md)
+
+## 実験セットのローカル実装（2026-10-19）
+
+右ペインの用途別入口とセット保存を接続した候補を、同梱Chromiumでローカル検証した。
+通常画面186件、保存基盤20件、ローカルDevice開発2件が成功した。
+移行、原本保持、破損データ回収、二ページの競合、実Workerの強制停止、音声コンテキストの破棄、
+再読込、幅320・736・1280px、キーボード操作を対象とする。過去の製品版ブラウザ確認とは別の結果である。
+
+保存は16セット、バイナリ合計60 MiB付近を実際のIndexedDBに用意し、4 MiBの選択セットを更新した。
+この実行では幅1280px・CPU制限なしが42ms、幅390px・CPU4倍制限が139msだった。
+同一ホスト上の単発計測であり、実機モバイルの性能、低速ストレージ、他ブラウザの性能を保証しない。
+
+この候補は未配信。製品版Chrome・Edge・Firefox・Safari、実機モバイル、配信先での旧データ移行は
+リリース前の確認として残る。新規DBへ切り替えて既存データを消す方法で代替しない。

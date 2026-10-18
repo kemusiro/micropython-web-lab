@@ -20,20 +20,16 @@ the top; the starter sample reads the button for eight seconds. Press and releas
 change its input level and see `Button: pressed` or `Button: released` in the adjacent live output.
 The output has a fixed height from the moment it appears and scrolls to the latest message whenever new output arrives.
 Completion requires a press followed by a release during a successful execution. Press Run to try
-again. The experiment tab is selected after the workspace finishes restoring. If no button experiment
-tab exists, a fresh sample opens alongside the existing code. Reloading restores the experiment topic
-and edited code. Open workspace to use all devices
-and the REPL. A missing button is connected automatically to GP15, or a free GPIO when GP15 is busy.
-Existing button wiring and other device connections are preserved. Adding the button restarts the
-runtime and saves the wiring. If saving fails, the experiment remains usable for the current session
-and reports the failure. No free GPIO or unavailable synchronous input is explained on screen.
+again. LED and button exercises are independent experiment sets. Opening one for the first time
+creates a copy of its code and wiring; reopening it uses your edited copy. The button set uses GP15.
+Unavailable synchronous input is explained on screen. Open workspace to use the current set's devices,
+files and REPL.
 
-Ordinary screen navigation preserves code, Python runtime state, and wiring. Your screen choice is saved as an
-independent browser-local preference. Existing saved projects and local Device development default to
-the full workspace. Reopening First experiment prepares a sample tab without replacing existing code.
-Guide progress restarts on reload while edited code is retained. Running the unchanged starter code
-shows the 500-to-200 instruction; running edited code instead asks you to change its blink interval.
-Invalid saved editor data keeps the workspace visible with the existing error message.
+View changes and browsing topics within the same set preserve Python execution. Opening another set
+saves the current edits, stops its Worker and audio, and prepares a new initial state without running
+code. Existing projects migrate into “Previous work”; original records are retained. Invalid or
+unsupported saved data is preserved with an error and a recovery-download action. Guide progress
+restarts on reload while edited code is retained.
 
 ## Key features
 
@@ -44,7 +40,8 @@ Invalid saved editor data keeps the workspace visible with the existing error me
 - Stop, reset with Ctrl+D, Worker replacement, and output limits (no execution deadline during alpha)
 - Functional GPIO, ADC, PWM, I2C, SPI, and UART models for the Pico 2 W
 - Virtual-device wiring and sample code
-- Browser-local storage for editor content and connection settings
+- Topic categories and experiment-set creation, reopening, renaming and deletion
+- Browser-local files, editor buffers, wiring and view settings for each experiment set
 - Japanese and English user interfaces
 
 This is not a complete MCU or electronic-circuit simulator. It does not reproduce instruction-level or
@@ -66,7 +63,7 @@ Stop stays at the top while scrolling within the workspace.
 ## Workspace layout
 
 At widths of 960px or more, the workspace has three panes: project files and examples on the left,
-the editor and output/REPL in the center, and live devices on the right. Drag or use arrow keys to resize
+the editor and output/REPL in the center, and topic entrances and live devices on the right. Drag or use arrow keys to resize
 the center/device boundary and the editor/REPL boundary. Narrower windows stack the panes vertically.
 
 The file tree starts expanded. Open “File operations / ZIP” for file creation, save-as, renaming,
@@ -84,7 +81,19 @@ The multi-device example list displays consecutive rows without blank spacing be
 the Worker, editor, REPL draft, Python variables, and pending wiring edits. Applying wiring still recreates
 the Worker. Stop and Restart remain available in the wiring view. Device cards use content-dependent heights
 and two columns when the device pane is wide enough. Collapsing a card leaves its simulation running.
-The existing saved device order is preserved; card collapse and multiline input visibility are page-local.
+Device order and collapsed cards are saved per set. Multiline input visibility remains page-local.
+
+Choose a topic offers Explore devices, Robots and control, Create sound and music, Learn programming,
+and Learn with books. Topics may appear in several categories. Current sets cover LED blinking, button
+input, button-to-LED control, a general device lab and YM2203. Arm physics and book material are in
+preparation. Saved sets reopens your work; Create another makes an independent copy of the bundled
+template. Experience, Setup and Explanation views expose each topic's controls. Name and backup allows
+renaming and recovery downloads. Template updates never overwrite your copies.
+
+ZIP transfer handles the current set's saved files. Download recovery data produces JSON containing
+stored records, current buffers and retained legacy data. Importing this recovery JSON is not yet
+supported. Local Device development keeps the previous single-project flow; use it on a different
+origin from the managed application.
 
 ## Editor and debugger
 
@@ -196,9 +205,9 @@ You can also run the unit tests, type checking and build, and browser tests sepa
 ```
 
 `test:e2e:experiments` uses a development fixture and real IndexedDB to verify experiment-set storage,
-migration and switching. The normal UI still uses the existing project flow; category screens and UI
-integration follow in E2. See [ADR 0051 (Japanese)](docs/adr/0051-add-transactional-experiment-set-storage.md)
-for the storage contract and migration plan.
+migration and switching. `test:e2e` covers the topic entrance, real Worker/audio switching and recovery UI.
+See [ADR 0051 (Japanese)](docs/adr/0051-add-transactional-experiment-set-storage.md) for the storage contract
+and [ADR 0052 (Japanese)](docs/adr/0052-connect-experiment-sets-to-the-workspace.md) for UI integration and migration.
 
 See [Browser and OS verification (Japanese)](docs/browser-compatibility.md) for instructions covering the
 release versions of Chrome, Edge, Firefox, and Safari on supported operating systems.

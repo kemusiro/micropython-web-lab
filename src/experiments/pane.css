@@ -1,0 +1,17 @@
+.experiment-pane { padding: 0.8rem; border-block: 1px solid #344c40; }
+#device-ui-root[hidden] { display: none; }
+.experiment-pane p { margin: 0.35rem 0 0.6rem; line-height: 1.55; overflow-wrap: anywhere; }
+#experiment-set-name { color: #e8efe9; font-weight: 700; }
+#experiment-set-status[data-state="error"] { color: #ffb3ad; }
+.experiment-navigation, .experiment-view-tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-block: 0.5rem; }
+.experiment-view-tabs [aria-pressed="true"] { color: #f2ca72; border-color: #f2ca72; }
+.experiment-card { border: 1px solid #344c40; border-radius: 0.45rem; padding: 0.75rem; margin-block: 0.5rem; min-width: 0; }
+.experiment-card h3 { font-size: 0.95rem; margin: 0 0 0.4rem; color: #e8efe9; }
+.experiment-card button { margin: 0.2rem; white-space: normal; overflow-wrap: anywhere; }
+.experiment-management { margin-top: 0.75rem; }
+.experiment-management form { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-block: 0.6rem; }
+.experiment-management input { width: 100%; min-width: 0; }
+.experiment-pane button:focus-visible, .experiment-pane input:focus-visible { outline: 2px solid #f2ca72; outline-offset: 3px; }
+body[data-app-screen="experiment"] #experiment-pane { display: none; }
+@media (max-width: 959px) { .experiment-navigation button { flex: 1 1 7rem; } }
+@media (forced-colors: active) { .experiment-card, .experiment-pane { border-color: CanvasText; } }

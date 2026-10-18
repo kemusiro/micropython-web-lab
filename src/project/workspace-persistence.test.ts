@@ -26,6 +26,16 @@ function delayedStore() {
 }
 
 describe("workspace persistence boundary", () => {
+  it("rebinds a retained source without mistaking uncommitted filesystem changes for saved files", () => {
+    const workspace = new ProjectWorkspace(null);
+    const uncommitted = project();
+    uncommitted.filesystem.entries = [{ kind: "file", path: "main.py", data: new TextEncoder().encode("Python changed the file") }];
+    workspace.restore(uncommitted, project().filesystem);
+    expect(workspace.loaded).toBe(true);
+    expect(workspace.files.snapshot()).toEqual(uncommitted.filesystem);
+    expect(workspace.isTabUnsaved(tab)).toBe(false);
+    expect(workspace.isTabUnsaved({ ...tab, source: "Python changed the file" })).toBe(true);
+  });
   it("owns the loaded data independently of the persistence adapter", async () => {
     const port = delayedStore();
     const workspace = new ProjectWorkspace(port.store);

@@ -1,4 +1,13 @@
 import "./styles.css";
+import "./experiments/pane.css";
+import { ExperimentCoordinator, ExperimentProjectPersistence, type ExperimentSession } from "./experiments/coordinator";
+import { ExperimentStore } from "./experiments/store";
+import { ExperimentPane } from "./experiments/pane";
+import { createTemplateCopy, MANAGED_EXPERIMENT_RUNTIME, type TemplateId } from "./experiments/catalog";
+import { experimentProject, snapshotExperiment, type ExperimentContent, type ExperimentSet } from "./experiments/record";
+import { clearExperimentJournal, EXPERIMENT_EXIT_JOURNAL_KEY, parseExperimentJournal, recoverExperimentJournal, writeExperimentJournal } from "./experiments/exit-journal";
+import { loadDevicePanelOrder } from "./device-ui/device-panel-order";
+import { snapshotStoredProject } from "./project/project-state";
 import { ProjectWorkspace } from "./project/workspace";
 import { FilePanel } from "./project/file-panel";
 import { ProjectFiles, type ProjectSnapshot } from "./project/filesystem";
@@ -239,7 +248,18 @@ const optionalContentIntegration = createOptionalContentIntegration({
   openEditorTab,
 });
 const draftStorage = browserStorage;
-const projectWorkspace = new ProjectWorkspace();
+let projectWorkspace = new ProjectWorkspace();
+const managedExperiments = !__WEB_LAB_LOCAL_MODE__;
+const experimentStore = managedExperiments && typeof indexedDB !== "undefined" ? new ExperimentStore() : null;
+let experimentCoordinator: ExperimentCoordinator | null = null;
+let experimentPane: ExperimentPane | null = null;
+let experimentLocked = managedExperiments;
+let experimentReadOnly = false;
+let configurationBusy = false;
+let observationSection: ExperimentSet["view"]["section"] = "experience";
+let runtimeReadyWaiter: ((status: RuntimeStatus) => void) | null = null;
+let installedSetId: string | null = null;
+let experimentOpening = false;
 let projectSaveGeneration = 0;
 let projectPersistence = Promise.resolve();
 const referenceDeviceUis = referenceDeviceUisForLocale(uiLocale);
@@ -297,15 +317,16 @@ const deviceUiRenderer = new DeviceUiRenderer(
         .map((entry) => entry.instanceId)
         .filter((instanceId) => hasDeviceExample(instanceId)),
     ),
-    orderStorage: browserStorage,
+    orderStorage: managedExperiments ? null : browserStorage,
     openExample: openDeviceExample,
+    presentationChanged: () => { if (experimentCoordinator && !experimentLocked && !experimentReadOnly) scheduleDraftSave(); },
   },
 );
 mountSoundPanel();
 deviceUiInputStatus.textContent =
   sharedDeviceInputs === null
     ? t("device.inputUnavailable")
-    : t("device.inputAvailable");
+    : managedExperiments ? (uiLocale === "ja" ? "接続したデバイスの入力を、実行中にも操作できます。" : "Connected device inputs remain interactive during execution.") : t("device.inputAvailable");
 deviceUiInputStatus.dataset.state = sharedDeviceInputs === null ? "unavailable" : "available";
 
 const runtime = new RuntimeClient(
@@ -356,6 +377,41 @@ const connectionEditor = new ConnectionEditor(connectionEditorRoot, {
   validate: validateEditedConnectionGraph,
   apply: applyEditedConnectionGraph,
 });
+
+if (managedExperiments) {
+  requiredElement<HTMLElement>("virtual-board-title").textContent = uiLocale === "ja" ? "実験・学習" : "Experiments and learning";
+  const description = document.querySelector<HTMLElement>('[data-i18n="board.description"]');
+  if (description) description.textContent = uiLocale === "ja" ? "題材を選び、コードとデバイスの動きを見比べます。" : "Choose a topic and compare code with device behaviour.";
+  experimentPane = new ExperimentPane(requiredElement<HTMLElement>("experiment-pane"), deviceUiRoot, {
+    locale: uiLocale,
+    list: () => experimentStore?.list() ?? Promise.resolve([]),
+    create: id => openManagedTemplate(id),
+    open: id => switchManagedSet({ kind: "saved", id }),
+    rename: async title => {
+      if (!experimentCoordinator || experimentReadOnly) throw new Error(t("draft.unavailable"));
+      await experimentCoordinator.rename(title);
+      experimentPane!.update(experimentCoordinator.current);
+    },
+    remove: async record => {
+      if (window.confirm(uiLocale === "ja" ? `「${record.title}」を削除しますか？` : `Delete “${record.title}”?`)) await experimentStore!.remove(record.id, record.revision);
+    },
+    section: section => { observationSection = section; if (experimentCoordinator && !experimentLocked && !experimentReadOnly) scheduleDraftSave(); },
+    configure: () => showDeviceConfiguration(true),
+    backup: downloadExperimentRecovery,
+    retry: async () => {
+      await backupEditorDrafts();
+      experimentPane?.status(uiLocale === "ja" ? "このブラウザに保存済み" : "Saved in this browser");
+    },
+    repair: async () => {
+      const result = await applyEditedConnectionGraph(MANAGED_CONNECTION_GRAPH);
+      if (!result.ok) throw new Error(result.message);
+      connectionEditor.restore(activeConnectionGraph);
+      experimentPane!.update(experimentCoordinator!.current, false);
+    },
+  });
+  experimentPane.setBusy(true);
+  connectionEditorRoot.addEventListener("change", () => { if (experimentCoordinator && !experimentLocked && !experimentReadOnly) scheduleDraftSave(); });
+}
 
 window.addEventListener(
   "keydown",
@@ -457,6 +513,7 @@ renderAppScreen();
 openWorkspaceButton.addEventListener("click", () => showAppScreen("workspace"));
 openExperimentButton.addEventListener("click", () => {
   if (codeEditor.readOnly) return;
+  if (experimentCoordinator) { void openManagedTemplate("led-blink", true).catch(projectError); return; }
   if (editorTabs.some((tab) => tab.id === experimentTabId)) {
     selectEditorTab(experimentTabId!);
   } else {
@@ -473,6 +530,7 @@ openExperimentButton.addEventListener("click", () => {
 });
 requiredElement<HTMLButtonElement>("experiment-finish-button").addEventListener("click", () => showAppScreen("workspace"));
 experimentButtonExample.addEventListener("click", () => {
+  if (experimentCoordinator) { void openManagedTemplate("button-input", true).catch(projectError); return; }
   const graph = prepareButtonExperimentConnection();
   if (editorTabs.some((tab) => tab.id === buttonExperimentTabId)) {
     selectEditorTab(buttonExperimentTabId!);
@@ -562,12 +620,12 @@ resetDraftButton.addEventListener("click", () => {
   }
 
   cancelScheduledDraftSave();
-  if (draftStorage === null) {
+  if (draftStorage === null && !managedExperiments) {
     setDraftStatus(t("draft.unavailable"), "error");
     return;
   }
 
-  const result = clearEditorWorkspace(draftStorage);
+  const result = managedExperiments || draftStorage === null ? { ok: true as const } : clearEditorWorkspace(draftStorage);
   if (!result.ok) {
     setDraftStatus(result.message, "error");
     return;
@@ -586,6 +644,16 @@ resetDraftButton.addEventListener("click", () => {
 window.addEventListener("pagehide", () => {
   soundPatchEditor.close();
   void soundPanel.close();
+  if (managedExperiments) {
+    if (experimentCoordinator && !experimentReadOnly) {
+      updateActiveEditorTabSource(codeEditor.value);
+      try {
+        if (draftStorage) writeExperimentJournal(draftStorage, snapshotExperiment({ ...experimentCoordinator.current, editor: { tabs: editorTabs, activeTabId: activeEditorTabId } }));
+      } catch (error) { projectError(error); }
+    }
+    cancelScheduledDraftSave();
+    return;
+  }
   if (autosaveTimer !== null) {
     cancelScheduledDraftSave();
     // A bounded synchronous editor journal covers navigation before IndexedDB
@@ -608,6 +676,7 @@ replInput.addEventListener("keydown", (event) => {
 });
 
 const restartRuntime = (): void => {
+  if (experimentReadOnly || experimentLocked || configurationBusy) return;
   appendTerminal(t("system.restarting"));
   runtime.restart();
 };
@@ -755,11 +824,29 @@ function validateEditedConnectionGraph(graph: ConnectionGraphV1): string | null 
   }
 }
 
-function applyEditedConnectionGraph(graph: ConnectionGraphV1): ConnectionEditorApplyResult {
+async function applyEditedConnectionGraph(graph: ConnectionGraphV1): Promise<ConnectionEditorApplyResult> {
   const validationError = validateEditedConnectionGraph(graph);
   if (validationError !== null) {
     return { ok: false, message: validationError };
   }
+  if (experimentCoordinator) {
+    if (experimentLocked || configurationBusy || filePanel.busy || experimentOpening) return { ok: false, message: t("files.wait") };
+    try { prepareManagedExperiment(snapshotExperiment({ ...experimentCoordinator.current, ...captureExperimentContent(graph) })); }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) }; }
+    configurationBusy = true; updateRuntimeStatus(runtime.status);
+    const session = experimentCoordinator.session;
+    try {
+      await experimentCoordinator.save(captureExperimentContent(graph), session);
+      if (!experimentCoordinator.isCurrent(session)) return { ok: false, message: "Obsolete connection update" };
+      experimentReadOnly = false;
+      installConnectionGraph(graph);
+      runtime.setProject(projectWorkspace.files.snapshot());
+      runtime.restart();
+      return { ok: true, message: t("connection.applied") };
+    } catch (error) { projectError(error); return { ok: false, message: error instanceof Error ? error.message : String(error) }; }
+    finally { configurationBusy = false; updateRuntimeStatus(runtime.status); }
+  }
+  if (managedExperiments) return { ok: false, message: t("connection.saveUnavailable") };
   if (draftStorage === null) {
     return { ok: false, message: t("connection.saveUnavailable") };
   }
@@ -791,6 +878,12 @@ function prepareButtonExperimentConnection(): ConnectionGraphV1 | null {
 }
 
 function installButtonExperimentConnection(graph: ConnectionGraphV1, restart: boolean): void {
+  if (managedExperiments) {
+    installConnectionGraph(graph); connectionEditor.syncAppliedDevice(graph, "button-gp15");
+    if (experimentCoordinator) void persistProject().catch(projectError);
+    if (restart) runtime.restart();
+    return;
+  }
   const saved = draftStorage === null
     ? { ok: false, message: t("connection.saveUnavailable") }
     : saveConnectionProject(draftStorage, graph);
@@ -806,6 +899,7 @@ function installButtonExperimentConnection(graph: ConnectionGraphV1, restart: bo
 }
 
 function sendCurrentInput(): void {
+  if (experimentLocked || experimentReadOnly || configurationBusy || experimentOpening) return;
   const input = replInput.value;
   if (input.trim().length === 0) {
     return;
@@ -830,6 +924,7 @@ function flushDirectTerminalInput(): void {
 }
 
 function sendDirectTerminalInput(data: string): void {
+  if (experimentLocked || experimentReadOnly || configurationBusy) return;
   const accepted = runtime.sendInput(data);
   if (!accepted) {
     appendTerminal(t("system.directInputUnavailable"));
@@ -865,12 +960,14 @@ function sendDebuggerCommand(selectedCommand?: string): void {
 }
 
 function forceKeyboardInterrupt(): void {
+  if (experimentLocked) { runtime.stop(); return; }
   replExecutionPending = false;
   appendTerminal(t("system.interrupt"));
   runtime.restart();
 }
 
 function runCurrentScript(mode: ScriptExecutionMode): void {
+  if (experimentLocked || experimentReadOnly || configurationBusy || experimentOpening) return;
   if (filePanel.busy || replRuntimeBusy || runtime.status !== "ready") return;
   if (appScreen === "experiment" && experimentTopic === "button" && !buttonExperimentAvailable()) return;
   soundPreviewActive = false;
@@ -962,7 +1059,7 @@ function renderExperiment(): void {
           ? t(sharedDeviceInputs === null ? "device.inputUnavailable" : "experiment.button.disconnected")
           : buttonTopic ? t(`experiment.button.feedback.${buttonExperiment.feedback}`) : t(`experiment.feedback.${experiment.feedback}`);
   const inExperiment = appScreen === "experiment";
-  runScriptButton.disabled = currentRuntimeStatus !== "ready" || filePanel.busy || replRuntimeBusy ||
+  runScriptButton.disabled = experimentLocked || experimentReadOnly || configurationBusy || experimentOpening || currentRuntimeStatus !== "ready" || filePanel.busy || replRuntimeBusy ||
     (inExperiment && buttonTopic && !buttonExperimentAvailable());
   experimentStopButton.hidden = !inExperiment || currentRuntimeStatus !== "executing";
   experimentRestartButton.hidden = !inExperiment || (currentRuntimeStatus !== "stopped" && currentRuntimeStatus !== "error");
@@ -1024,6 +1121,10 @@ function scheduleDraftSave(): void {
   setDraftStatus(t("draft.pending"), "pending");
   autosaveTimer = window.setTimeout(() => {
     autosaveTimer = null;
+    // Explicit file operations install their result after persistence completes.
+    // Capture automatic saves only after that installation, never from the old filesystem.
+    if (filePanel.busy || configurationBusy || experimentOpening) { scheduleDraftSave(); return; }
+    if (experimentLocked || experimentReadOnly) return;
     saveCurrentDraft();
   }, AUTOSAVE_DELAY_MS);
 }
@@ -1042,11 +1143,245 @@ function saveCurrentDraft(): void {
 
 function projectError(error: unknown): void {
   setDraftStatus(error instanceof Error ? error.message : String(error), "error");
+  experimentPane?.status(error instanceof Error ? error.message : String(error), true);
+}
+
+function prepareManagedExperiment(record: ExperimentSet): void {
+  if (JSON.stringify(record.runtimeRef) !== JSON.stringify(MANAGED_EXPERIMENT_RUNTIME)) throw new Error(uiLocale === "ja" ? "この実行環境の版には対応していません。コードを退避できます。" : "This runtime version is unavailable. You can download the code.");
+  if (record.environment.kind !== "board") throw new Error(uiLocale === "ja" ? "保存された配線を復旧してください。元データは保持しています。" : "The stored wiring needs recovery. Original data is retained.");
+  const error = validateEditedConnectionGraph(record.environment.connectionGraph);
+  if (error) throw new Error(error);
+  if (Object.keys(record.initialConditions.inputs).length) throw new Error("Unsupported initial input configuration");
+}
+
+function captureExperimentContent(overrideGraph?: ConnectionGraphV1): ExperimentContent {
+  if (!experimentCoordinator) throw new Error(t("draft.unavailable"));
+  updateActiveEditorTabSource(codeEditor.value);
+  const current = experimentCoordinator.current;
+  const graph = overrideGraph ?? activeConnectionGraph;
+  const draft = connectionEditor.graph();
+  return {
+    filesystem: projectWorkspace.files.snapshot(), editor: { tabs: editorTabs, activeTabId: activeEditorTabId },
+    environment: overrideGraph ? { kind: "board", connectionGraph: overrideGraph }
+      : current.environment.kind === "unavailable" ? current.environment : { kind: "board", connectionGraph: graph },
+    initialConditions: current.initialConditions, runPolicy: current.runPolicy,
+    view: { id: "devices-v1", section: observationSection, deviceOrder: deviceUiRenderer.panelOrder,
+      collapsedDevices: deviceUiRenderer.collapsedDevices },
+    ...(JSON.stringify(draft) === JSON.stringify(graph) ? {} : { configurationDraft: draft }),
+  };
+}
+
+function installManagedExperiment(record: ExperimentSet, session: ExperimentSession): void {
+  const coordinator = experimentCoordinator!;
+  const retainedSource = installedSetId === record.id;
+  const baseline = retainedSource ? projectWorkspace.savedFilesSnapshot : record.filesystem;
+  const port = new ExperimentProjectPersistence(coordinator, session, captureExperimentContent);
+  const workspace = new ProjectWorkspace({
+    load: () => port.load(),
+    save: async value => {
+      const baseRevision = coordinator.current.revision;
+      let journal: string | null = null;
+      try { journal = draftStorage?.getItem(EXPERIMENT_EXIT_JOURNAL_KEY) ?? null; } catch { /* Storage error is shown on save. */ }
+      await port.save(value);
+      if (!coordinator.isCurrent(session)) return;
+      if (journal && draftStorage) {
+        try { clearExperimentJournal(draftStorage, session.setId, baseRevision, journal); } catch { /* Retain an invalid journal for recovery. */ }
+      }
+      experimentPane?.update(coordinator.current, experimentReadOnly);
+    },
+  });
+  const stored = workspace.restore(experimentProject(record), baseline);
+  installedSetId = record.id;
+  projectWorkspace = workspace;
+  editorTabs = stored.tabs; activeEditorTabId = stored.activeTabId;
+  codeEditor.value = activeEditorTab().source;
+  observationSection = record.view.section;
+  if (record.environment.kind === "board") activeConnectionGraph = record.environment.connectionGraph;
+  const entries = record.environment.kind === "board" ? deviceUiEntries(activeConnectionGraph) : [];
+  deviceUiRenderer.replace(entries, { order: record.view.deviceOrder, collapsed: record.view.collapsedDevices ?? [] });
+  connectionEditor.restore(activeConnectionGraph, record.configurationDraft);
+  mountSoundPanel();
+  runtime.setConnectionGraph(activeConnectionGraph);
+  runtime.setProject(projectWorkspace.files.snapshot());
+  if (!retainedSource) {
+    terminalScreen.clear(); renderTerminal();
+    replInput.value = ""; terminalDirectInput.value = "";
+    experiment.reset(); buttonExperiment.reset();
+  }
+  experimentTabId = null; buttonExperimentTabId = null;
+  if (record.origin.kind === "template" && record.origin.id === "button-input") {
+    experimentTopic = "button"; buttonExperimentTabId = activeEditorTabId;
+  } else { experimentTopic = "led"; experimentTabId = activeEditorTabId; }
+  if (!retainedSource) { experimentOutput.textContent = ""; experimentOutputDetails.hidden = true; experimentOutputDetails.open = false; }
+  renderEditorTabs(); filePanel.render();
+  optionalContentIntegration.editorChanged(codeEditor.value);
+  experimentPane?.update(record, experimentReadOnly);
+}
+
+function startManagedRuntime(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const finish = (error?: Error) => { window.clearTimeout(timer); runtimeReadyWaiter = null; if (error) reject(error); else resolve(); };
+    const timer = window.setTimeout(() => { finish(new Error(uiLocale === "ja" ? "実行環境の起動が時間切れになりました。再起動できます。" : "Runtime startup timed out. You can retry.")); runtime.stop(); }, 15_000);
+    runtimeReadyWaiter = status => {
+      if (status === "ready") finish();
+      else if (status === "error" || status === "stopped") finish(new Error(t("experiment.feedback.unavailable")));
+    };
+    try { runtime.start(); } catch (error) { finish(error instanceof Error ? error : new Error(String(error))); }
+  });
+}
+
+async function initializeManagedExperiments(): Promise<void> {
+  try {
+    if (!experimentStore) throw new Error(t("draft.unavailable"));
+    let record = await experimentStore.selected();
+    if (!record) {
+      const legacy = await projectWorkspace.load(editorTabs, activeEditorTabId, legacySavedAt);
+      if (!projectWorkspace.restored && restoredWorkspace === "invalid") throw new Error(uiLocale === "ja"
+        ? "保存されたエディタ情報が不正です。原データを保持しています。データを退避してください。"
+        : "The legacy editor data is invalid. Original data is retained for recovery.");
+      const connection = draftStorage ? loadConnectionProject(draftStorage) : { status: "empty" as const };
+      const invalidConnection = connection.status === "invalid" || connection.status === "unavailable" ||
+        (connection.status === "loaded" && validateEditedConnectionGraph(connection.project.graph) !== null);
+      const fresh = !projectWorkspace.restored && (restoredWorkspace === "empty" || (restoredWorkspace === "unavailable" && draftStorage === null)) && connection.status === "empty";
+      const initial = fresh ? await createTemplateCopy(appScreen === "experiment" ? "led-blink" : "device-lab", uiLocale) : undefined;
+      record = await experimentStore.migrateLegacy({ fallback: legacy, runtimeRef: MANAGED_EXPERIMENT_RUNTIME,
+        environment: invalidConnection ? { kind: "unavailable", reason: "invalid-legacy-connection" } : { kind: "board", connectionGraph: activeConnectionGraph },
+        title: uiLocale === "ja" ? "これまでの作業" : "Previous work", freshRecord: initial,
+        journal: legacySavedAt ? { tabs: legacy.tabs, activeTabId: legacy.activeTabId, savedAt: legacySavedAt } : undefined,
+        view: { id: "devices-v1", section: "experience", deviceOrder: loadDevicePanelOrder(draftStorage).filter(id => managedDeviceDefinitions.has(id)).slice(0, 64) },
+      });
+    }
+    let recoveredJournal = false;
+    try {
+      const journal = draftStorage?.getItem(EXPERIMENT_EXIT_JOURNAL_KEY);
+      if (journal) {
+        const parsed = parseExperimentJournal(journal);
+        if (parsed.setId === record.id && JSON.stringify({ tabs: parsed.tabs, activeTabId: parsed.activeTabId }) === JSON.stringify(record.editor)) {
+          clearExperimentJournal(draftStorage!, parsed.setId, parsed.baseRevision, journal);
+        } else { record = recoverExperimentJournal(record, journal); recoveredJournal = true; }
+      }
+    } catch (error) { projectError(error); }
+    try { prepareManagedExperiment(record); } catch (error) { experimentReadOnly = true; projectError(error); }
+    experimentCoordinator = new ExperimentCoordinator(experimentStore, {
+      prepare: async candidate => prepareManagedExperiment(candidate),
+      lock: locked => {
+        experimentLocked = locked;
+        if (locked) { cancelScheduledDraftSave(); updateActiveEditorTabSource(codeEditor.value); }
+        updateRuntimeStatus(runtime.status);
+      },
+      stop: async () => { runtime.stop(); soundPatchEditor.close(); await soundPanel.close(); sharedDeviceInputs?.reset(); },
+      capture: captureExperimentContent,
+      install: (candidate, session) => { experimentReadOnly = false; installManagedExperiment(candidate, session); },
+      start: async () => { await startManagedRuntime(); },
+    }, record);
+    installManagedExperiment(record, experimentCoordinator.session);
+    const guided = record.origin.kind === "template" && (record.origin.id === "led-blink" || record.origin.id === "button-input");
+    if (!guided || experimentReadOnly || activeEditorTab().path !== "main.py") appScreen = "workspace";
+    renderAppScreen();
+    let recoveredSaveFailed = false;
+    if (recoveredJournal && !experimentReadOnly) {
+      try { await projectWorkspace.save(editorTabs, activeEditorTabId); }
+      catch (error) { recoveredSaveFailed = true; projectError(error); }
+    }
+    if (!experimentReadOnly) {
+      if (!recoveredSaveFailed) {
+        if (draftStorage === null) projectError(new Error(uiLocale === "ja" ? "終了時の退避用ブラウザ保存を利用できません。通常の保存は継続します。" : "Exit-journal storage is unavailable. Normal IndexedDB saves remain available."));
+        else {
+          experimentPane?.status(uiLocale === "ja" ? "このブラウザに保存済み" : "Saved in this browser");
+          setDraftStatus(t("draft.restored", { time: formatSavedAt(record.savedAt) }), "saved");
+        }
+      }
+      await startManagedRuntime();
+    } else runtime.stop();
+  } catch (error) {
+    projectError(error);
+    if (experimentStore && !experimentCoordinator) {
+      try {
+        const recovery = await experimentStore.readRecoveryWorkspace();
+        const selectedId = (recovery.workspace as { selectedSetId?: unknown } | undefined)?.selectedSetId;
+        const raw = (recovery.sets.find(entry => entry.key === selectedId)?.value ?? recovery.legacy) as Partial<ExperimentSet> & { tabs?: unknown; activeTabId?: unknown } | undefined;
+        if (raw?.filesystem && (raw.editor || raw.tabs)) {
+          const stored = snapshotStoredProject({ version: 1, filesystem: raw.filesystem, tabs: raw.editor?.tabs ?? raw.tabs, activeTabId: raw.editor?.activeTabId ?? raw.activeTabId });
+          projectWorkspace = new ProjectWorkspace(null); projectWorkspace.restore(stored);
+          editorTabs = stored.tabs; activeEditorTabId = stored.activeTabId; codeEditor.value = activeEditorTab().source;
+          experimentReadOnly = true; appScreen = "workspace"; renderEditorTabs(); filePanel.render(); renderAppScreen();
+        }
+      } catch { /* Keep the original data and the in-memory editor available for backup. */ }
+    }
+    if (!experimentCoordinator) {
+      if (!experimentReadOnly) {
+        const snapshot = projectWorkspace.files.snapshot();
+        const baseline = projectWorkspace.savedFilesSnapshot;
+        projectWorkspace = new ProjectWorkspace(null);
+        projectWorkspace.restore({ version: 1, filesystem: snapshot, tabs: editorTabs, activeTabId: activeEditorTabId }, baseline);
+        runtime.setProject(snapshot);
+        runtime.start();
+      } else runtime.stop();
+    }
+  } finally {
+    experimentLocked = false;
+    experimentPane?.update(experimentCoordinator?.current ?? null, experimentReadOnly);
+    updateRuntimeStatus(runtime.status);
+  }
+}
+
+async function switchManagedSet(target: { kind: "saved"; id: string } | { kind: "new"; record: ExperimentSet }): Promise<void> {
+  if (!experimentCoordinator || experimentReadOnly) throw new Error(t("draft.unavailable"));
+  if (filePanel.busy || configurationBusy) throw new Error(t("files.wait"));
+  experimentOpening = true; updateRuntimeStatus(runtime.status);
+  try {
+    await experimentCoordinator.switchTo(target);
+    projectSaveGeneration++;
+    appScreen = "workspace"; showAppScreen("workspace");
+    experimentPane?.show("work");
+    experimentPane?.status(uiLocale === "ja" ? "保存して切り替えました。実行すると開始します。" : "Saved and switched. Press Run to begin.");
+    codeEditor.focus({ preventScroll: true });
+  } catch (error) { projectError(error); throw error; }
+  finally { experimentOpening = false; updateRuntimeStatus(runtime.status); }
+}
+
+async function openManagedTemplate(id: TemplateId, guided = false): Promise<void> {
+  if (!experimentCoordinator || !experimentStore) throw new Error(t("draft.unavailable"));
+  if (experimentOpening) throw new Error(t("files.wait"));
+  experimentOpening = true; updateRuntimeStatus(runtime.status);
+  try { if (guided) {
+    const existing = (await experimentStore.list()).find(record => record.origin.kind === "template" && record.origin.id === id);
+    if (existing) await switchManagedSet({ kind: "saved", id: existing.id });
+    else await switchManagedSet({ kind: "new", record: await createTemplateCopy(id, uiLocale) });
+    const sample = editorTabs.find(tab => tab.path === "main.py");
+    if (sample && sample.id !== activeEditorTabId) selectEditorTab(sample.id);
+    experiment.reset(); buttonExperiment.reset();
+    experimentTopic = id === "button-input" ? "button" : "led";
+    if (experimentTopic === "button") buttonExperimentTabId = activeEditorTabId; else experimentTabId = activeEditorTabId;
+    showAppScreen("experiment");
+  } else await switchManagedSet({ kind: "new", record: await createTemplateCopy(id, uiLocale) });
+  } finally { experimentOpening = false; updateRuntimeStatus(runtime.status); }
+}
+
+async function downloadExperimentRecovery(): Promise<void> {
+  updateActiveEditorTabSource(codeEditor.value);
+  let stored: unknown;
+  try { stored = await experimentStore?.readRecoveryWorkspace(); } catch (error) { stored = { error: String(error) }; }
+  const legacy: Record<string, string | null> = {};
+  for (const key of ["micropython-web-lab:editor-workspace:v2", "micropython-web-lab:editor-draft:v1", "micropython-web-lab:connection-project:v1", EXPERIMENT_EXIT_JOURNAL_KEY]) {
+    try { legacy[key] = draftStorage?.getItem(key) ?? null; } catch { legacy[key] = null; }
+  }
+  let experiment: unknown;
+  try { if (experimentCoordinator) experiment = snapshotExperiment({ ...experimentCoordinator.current, ...captureExperimentContent() }); }
+  catch (error) { experiment = { error: String(error), record: experimentCoordinator?.current }; }
+  const packet = { kind: "weblab-recovery", version: 1, stored, legacy, experiment, current: {
+    filesystem: projectWorkspace.files.snapshot(), tabs: editorTabs, activeTabId: activeEditorTabId,
+  } };
+  const json = JSON.stringify(packet, (_key, value) => value instanceof Uint8Array ? { type: "Uint8Array", data: Array.from(value) } : value, 2);
+  const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+  const link = document.createElement("a"); link.href = url; link.download = "weblab-recovery-v1.json"; link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 async function initializeProject(): Promise<void> {
   codeEditor.readOnly = true;
   filePanel.setLocked(true);
+  if (managedExperiments) { await initializeManagedExperiments(); return; }
   try {
     const stored = await projectWorkspace.load(editorTabs, activeEditorTabId, legacySavedAt);
     editorTabs = stored.tabs;
@@ -1107,9 +1442,13 @@ function restoreExperimentEditor(): void {
 }
 
 function persistProject(): Promise<void> {
+  if (experimentLocked) return Promise.resolve();
+  if (experimentReadOnly) return Promise.reject(new Error(uiLocale === "ja" ? "復旧用の読取専用表示です。データを退避してください。" : "Read-only recovery view. Download your data."));
   const generation = ++projectSaveGeneration;
+  const workspace = projectWorkspace;
   setDraftStatus(t("draft.pending"), "pending");
-  projectPersistence = projectWorkspace.save(editorTabs, activeEditorTabId).then(() => {
+  projectPersistence = workspace.save(editorTabs, activeEditorTabId).then(() => {
+    if (workspace !== projectWorkspace) return;
     updateEditorTabSaveIndicators();
     if (generation === projectSaveGeneration) setDraftStatus(t("draft.saved", { time: formatSavedAt(new Date().toISOString()) }), "saved");
   });
@@ -1755,7 +2094,7 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   }[status];
 
   sendButton.disabled = status !== "ready";
-  const sourceLocked = status === "executing" || status === "debugging" || filePanel.busy || replRuntimeBusy;
+  const sourceLocked = experimentLocked || experimentReadOnly || configurationBusy || status === "executing" || status === "debugging" || filePanel.busy || replRuntimeBusy;
   const soundRestartable = (status === "stopped" || status === "error") && !filePanel.busy && !replRuntimeBusy;
   const soundUnavailableReason = !soundPanel.connected
     ? (uiLocale === "ja" ? "音源を接続してください。" : "Connect the sound module.")
@@ -1771,16 +2110,16 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-device-example]")) {
     button.disabled = sourceLocked;
   }
-  filePanel.setLocked(sourceLocked || status === "starting" || !projectWorkspace.loaded);
-  saveDraftButton.disabled = sourceLocked || !projectWorkspace.loaded;
-  resetDraftButton.disabled = sourceLocked;
+  filePanel.setLocked(sourceLocked || experimentOpening || status === "starting" || !projectWorkspace.loaded);
+  saveDraftButton.disabled = sourceLocked || experimentOpening || !projectWorkspace.loaded;
+  resetDraftButton.disabled = sourceLocked || experimentOpening;
   if (status !== "debugging") {
     clearDebuggerWorkspace();
   }
   if (status !== "debugging" && status !== "executing") {
     codeEditorView.setBreakpoints([]);
   }
-  terminalDirectInput.disabled = status !== "ready" || filePanel.busy;
+  terminalDirectInput.disabled = experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || filePanel.busy;
   terminalShell.dataset.ready = String(status === "ready" || status === "debugging");
   if (status !== "ready") {
     terminalInputComposing = false;
@@ -1793,14 +2132,21 @@ function updateRuntimeStatus(status: RuntimeStatus): void {
   } else {
     debuggerCommandInput.value = "";
   }
-  sendButton.disabled = status !== "ready" || filePanel.busy;
-  debugScriptButton.disabled = status !== "ready" || sharedDebuggerChannel === null || filePanel.busy || replRuntimeBusy;
+  sendButton.disabled = experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || filePanel.busy;
+  debugScriptButton.disabled = experimentLocked || experimentReadOnly || configurationBusy || status !== "ready" || sharedDebuggerChannel === null || filePanel.busy || replRuntimeBusy;
   debugScriptButton.title =
     sharedDebuggerChannel === null
       ? t("debugger.requiresIsolation")
       : t("debugger.description");
   stopButton.disabled = status === "stopped";
+  restartButton.disabled = experimentLocked || experimentReadOnly || configurationBusy;
+  experimentRestartButton.disabled = experimentLocked || experimentReadOnly || configurationBusy;
   renderExperiment();
+  connectionEditorRoot.inert = experimentLocked || configurationBusy || filePanel.busy || experimentOpening;
+  deviceUiRenderer.setInteractive(sharedDeviceInputs !== null && !experimentLocked && !experimentReadOnly);
+  experimentPane?.execution(status === "executing" || status === "debugging" || replRuntimeBusy);
+  experimentPane?.setBusy(experimentLocked || configurationBusy || filePanel.busy || experimentOpening);
+  runtimeReadyWaiter?.(status);
   optionalContentIntegration.runtimeStatusChanged(status);
 }
 

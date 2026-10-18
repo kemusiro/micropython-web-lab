@@ -30,6 +30,15 @@ export class ProjectWorkspace {
     return this.stageTabs(tabs, activeTabId, true);
   }
   get loaded(): boolean { return this.#loaded; }
+  get savedFilesSnapshot(): ProjectSnapshot { return this.#persistedFiles.snapshot(); }
+  /** Install a set without a storage round-trip; retain the old baseline after a failed switch. */
+  restore(value: StoredProject, savedFiles: ProjectSnapshot = value.filesystem): StoredProject {
+    const stored = snapshotStoredProject(value);
+    this.#persistedFiles.replace(savedFiles);
+    this.files.replace(stored.filesystem);
+    this.#loaded = true; this.restored = true;
+    return stored;
+  }
   isTabUnsaved(tab: EditorWorkspaceTab): boolean {
     return hasUnsavedEditorChanges(tab, tab.path ? this.#persistedFiles.get(tab.path) : undefined);
   }

@@ -49,6 +49,7 @@ describe("experiment record contract", () => {
     ["invalid policy", { runPolicy: { kind: "unlimited-server" } }],
     ["nonfinite input", { initialConditions: { inputs: { torque: Infinity } } }],
     ["duplicate view order", { view: { id: "devices-v1", section: "experience", deviceOrder: ["button", "button"] } }],
+    ["duplicate collapsed devices", { view: { id: "devices-v1", section: "experience", deviceOrder: [], collapsedDevices: ["led", "led"] } }],
     ["sparse view order", { view: { id: "devices-v1", section: "experience", deviceOrder: [,] } }],
   ])("rejects %s without changing recoverable source data", (_name, changes) => {
     const original = makeExperiment();

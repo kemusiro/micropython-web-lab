@@ -20,7 +20,7 @@ test("switches the complete managed UI to English and remembers the locale", asy
   await expect(page.getByText("Public alpha", { exact: true })).toBeVisible();
   await expect(page.getByText("Keep a separate copy of important code.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Run script" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Virtual board and devices" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Experiments and learning" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Built-in LED" })).toBeVisible();
 
   await page.locator("#open-device-configuration").click();
@@ -640,6 +640,7 @@ test("reorders device panels by drag and keyboard and restores the order", async
     "押しボタンを10件中1番目へ移動しました",
   );
 
+  await expect(page.locator("#draft-status")).toHaveAttribute("data-state", "saved");
   await page.reload();
   await expect(page.getByText("実行可能", { exact: true })).toBeVisible();
   expect((await cardOrder()).slice(0, 3)).toEqual([
@@ -676,6 +677,8 @@ test("can move a compact panel again after dropping it onto the middle of a tall
       elements.map((element) => (element as HTMLElement).dataset.deviceInstance!),
     );
   const dragHeadingToMiddle = async (target: typeof tallTarget): Promise<void> => {
+    await sourceHeading.scrollIntoViewIfNeeded();
+    await target.scrollIntoViewIfNeeded();
     const headingBox = await sourceHeading.boundingBox();
     const targetBox = await target.boundingBox();
     expect(headingBox).not.toBeNull();

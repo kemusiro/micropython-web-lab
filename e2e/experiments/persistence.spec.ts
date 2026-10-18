@@ -346,3 +346,70 @@ test("the aggregate 64 MiB limit includes UTF-8 editor buffers and binary bytes"
   expect(result.selected).toBe(result.expected);
   expect(result.count).toBe(4);
 });
+
+test("uses a fresh template only when no legacy record exists, including a migration race", async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const f = await import("/fixtures/experiments/fixture.ts");
+    const fresh = f.makeExperiment("fresh", "new template");
+    const empty = new f.ExperimentStore(new f.ProjectDatabase(indexedDB, "fresh-empty"));
+    const created = await empty.migrateLegacy({ ...f.migrationOptions(), freshRecord: fresh });
+    await f.seedLegacy("fresh-race");
+    const raced = new f.ExperimentStore(new f.ProjectDatabase(indexedDB, "fresh-race"));
+    const migrated = await raced.migrateLegacy({ ...f.migrationOptions(), freshRecord: fresh });
+    return { created: created.id, source: migrated.editor.tabs[0].source, origin: migrated.origin.kind };
+  });
+  expect(result.created).toBe("fresh");
+  expect(result.source).toContain("draft-first");
+  expect(result.origin).toBe("legacy");
+});
+
+test("deletion checks the stored revision and refuses the current selection", async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const f = await import("/fixtures/experiments/fixture.ts");
+    const store = new f.ExperimentStore(new f.ProjectDatabase(indexedDB, "delete"));
+    const first = await store.migrateLegacy(f.migrationOptions());
+    await store.switch(first, { kind: "new", record: f.makeExperiment("second") });
+    let conflict = "", selected = "";
+    try { await store.remove(first.id, first.revision); } catch (e) { conflict = (e as Error).name; }
+    try { await store.remove("second", 1); } catch (e) { selected = (e as Error).message; }
+    await store.remove(first.id, (await store.load(first.id)).revision);
+    return { conflict, selected, ids: (await store.list()).map(record => record.id) };
+  });
+  expect(result.conflict).toBe("ExperimentConflictError");
+  expect(result.selected).toContain("current set");
+  expect(result.ids).toEqual(["second"]);
+});
+
+test("measures saves near both limits at desktop and a narrow viewport with CPU throttling", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  await page.evaluate(async () => {
+    const f = await import("/fixtures/experiments/fixture.ts");
+    const store = new f.ExperimentStore(new f.ProjectDatabase(indexedDB, "capacity-timing"));
+    let current = await store.migrateLegacy(f.migrationOptions());
+    for (let i = 1; i < 16; i++) {
+      const record = f.snapshotExperiment({ ...f.makeExperiment(`large-${i}`), filesystem: { version: 1, entries: [
+        { kind: "file", path: "data.bin", data: new Uint8Array(4 * 1024 * 1024) },
+      ] } });
+      current = await store.switch(current, { kind: "new", record });
+    }
+    (window as any).timingStore = store;
+    (window as any).timingCurrent = current;
+  });
+  const session = await page.context().newCDPSession(page);
+  const samples = [];
+  for (const [width, rate] of [[1280, 1], [390, 4]]) {
+    await page.setViewportSize({ width, height: 800 });
+    await session.send("Emulation.setCPUThrottlingRate", { rate });
+    const sample = await page.evaluate(async () => {
+      const w = window as any;
+      const before = performance.now();
+      w.timingCurrent = await w.timingStore.save(w.timingCurrent);
+      return { elapsedMs: Math.round(performance.now() - before), revision: w.timingCurrent.revision };
+    });
+    samples.push({ width, cpuRate: rate, ...sample });
+  }
+  await session.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  await testInfo.attach("capacity-save-timing.json", { body: JSON.stringify({ sets: 16, binaryMiB: 60, samples }), contentType: "application/json" });
+  console.log("experiment capacity save timing", JSON.stringify(samples));
+  expect(samples[1]!.revision).toBe(samples[0]!.revision + 1);
+});
