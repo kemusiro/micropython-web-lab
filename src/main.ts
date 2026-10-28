@@ -1411,6 +1411,7 @@ async function openManagedTemplate(id: TemplateId, guided = false): Promise<void
     experimentTopic = id === "button-input" ? "button" : "led";
     if (experimentTopic === "button") buttonExperimentTabId = activeEditorTabId; else experimentTabId = activeEditorTabId;
     showAppScreen("experiment");
+    if (experimentTopic === "button") experimentGuide.scrollIntoView({ block: "start" });
   } else await switchManagedSet({ kind: "new", record: await createTemplateCopy(id, uiLocale) });
   } finally { experimentOpening = false; updateRuntimeStatus(runtime.status); }
 }

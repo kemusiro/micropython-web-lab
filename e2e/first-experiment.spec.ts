@@ -95,6 +95,8 @@ async function openButtonExperiment(page: Page, url = "/", inputAvailable = true
   await editor.fill((await editor.inputValue()).replace("interval_ms = 500", "interval_ms = 200"));
   await run.click();
   await expect(page.locator("#experiment-step")).toHaveText("実験完了");
+  // Preserve a low scroll position before the asynchronous guided-set switch.
+  await page.locator("#experiment-button-example").evaluate(node => node.scrollIntoView({ block: "end" }));
   await page.locator("#experiment-button-example").click();
   await expect(page.locator("body")).toHaveAttribute("data-experiment-topic", "button");
   if (inputAvailable) await expect(run).toBeEnabled();
