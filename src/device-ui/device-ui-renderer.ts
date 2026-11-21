@@ -29,6 +29,7 @@ export interface DeviceUiRendererOptions {
   readonly exampleInstanceIds?: ReadonlySet<string>;
   readonly orderStorage?: DevicePanelOrderStorage | null;
   openExample?(instanceId: string): void;
+  presentationChanged?(): void;
 }
 
 interface RenderedDevice {
@@ -124,11 +125,25 @@ export class DeviceUiRenderer {
     }
   }
 
-  replace(entries: readonly DeviceUiEntry[]): void {
+  get panelOrder(): string[] { return [...this.#panelOrder]; }
+  get collapsedDevices(): string[] {
+    return [...this.#devices].filter(([, device]) => device.card.querySelector(".device-ui-collapse")?.getAttribute("aria-expanded") === "false").map(([id]) => id);
+  }
+
+  replace(entries: readonly DeviceUiEntry[], presentation?: { order: readonly string[]; collapsed: readonly string[] }): void {
+    if (presentation) this.#panelOrder = [...presentation.order];
     this.#clearDragState();
     this.#devices.clear();
     this.#lastSequences.clear();
     this.#render(entries);
+    if (presentation) for (const id of presentation.collapsed) {
+      const device = this.#devices.get(id);
+      const button = device?.card.querySelector<HTMLButtonElement>(".device-ui-collapse");
+      if (!device || !button) continue;
+      button.setAttribute("aria-expanded", "false"); button.textContent = "▸";
+      for (const element of device.card.querySelectorAll<HTMLElement>(".device-ui-components, .device-ui-description")) element.hidden = true;
+      device.actionStatus.hidden = true;
+    }
   }
 
   #render(entries: readonly DeviceUiEntry[]): void {
@@ -295,6 +310,7 @@ export class DeviceUiRenderer {
       actionStatus.hidden = collapsed;
       const description = card.querySelector<HTMLElement>(".device-ui-description");
       if (description !== null) description.hidden = collapsed;
+      this.#options.presentationChanged?.();
     });
     headingActions.append(collapse);
 
@@ -457,6 +473,7 @@ export class DeviceUiRenderer {
     const visibleOrder = this.#visibleCards().map((card) => card.dataset.deviceInstance!);
     this.#panelOrder = updateVisibleDevicePanelOrder(this.#panelOrder, visibleOrder);
     saveDevicePanelOrder(this.#options.orderStorage ?? null, this.#panelOrder);
+    this.#options.presentationChanged?.();
     this.#updateMoveHandleLabels();
     const movedIndex = visibleOrder.indexOf(movedInstanceId);
     const moved = this.#devices.get(movedInstanceId);

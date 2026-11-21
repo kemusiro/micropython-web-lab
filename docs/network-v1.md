@@ -5,6 +5,7 @@
 非公式の機能シミュレーション。電波・暗号・TCPパケット単位の再現ではない。
 右ペインの「ネットワーク」を開き、サンプルを新しいタブへ追加して実行する。
 初期SSIDは`WebLab-Demo`、仮想パスワードは`demo-password`。実在のWiFi情報は不要。
+ネットワークはボード型実験で利用でき、モデル型のアーム実験には公開しない。
 同期APIの待機には既存と同じクロスオリジン分離とSharedArrayBufferが必要。
 未対応環境ではAPIがENOSYS相当のOSErrorとなり、ネットワークを黙って迂回しない。
 共有メモリがない場合は通常のtimeモジュールを維持し、ネットワーク以外のREPL利用を妨げない。
@@ -135,7 +136,7 @@ Worker再生成では仮想RTCとWiFi/接続を初期化し、ページ内の仮
 ## 構成と検証
 
 Python互換層 → 版付きJSON要求 → メインスレッドのNetworkHost → 仮想モデル/登録済み実通信。
-要求は48 KiB、応答は160 KiBまで。Runtime Protocol v16はWorkerごとの共有応答領域と
+要求は48 KiB、応答は160 KiBまで。Runtime Protocol v17はWorkerごとの共有応答領域と
 単調増加要求IDを持つ。古いWorkerの応答は書き込まない。停止時に通信を中断しWorkerを破棄する。
 WASM成果物、ヒープ、js/jsffi禁止は変更しない。Device APIへネットワーク権限を渡さない。
 

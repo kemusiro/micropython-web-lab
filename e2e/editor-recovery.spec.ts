@@ -80,15 +80,20 @@ test("restores a newer exit journal as drafts without rewriting files or naming 
   await expect(page.getByRole("tab", { name: "main.py", exact: true })).toHaveText("●main.py");
   const storedSource = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("micropython-web-lab-project", 1);
+      const request = indexedDB.open("micropython-web-lab-project");
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
     try {
       return await new Promise<string>((resolve, reject) => {
-        const request = db.transaction("project").objectStore("project").get("current");
-        request.onsuccess = () => resolve(new TextDecoder().decode(request.result.filesystem.entries.find((entry: { path: string }) => entry.path === "main.py").data));
-        request.onerror = () => reject(request.error);
+        const tx = db.transaction(["experimentWorkspace", "experimentSets"]);
+        const selected = tx.objectStore("experimentWorkspace").get("current");
+        selected.onsuccess = () => {
+          const request = tx.objectStore("experimentSets").get(selected.result.selectedSetId);
+          request.onsuccess = () => resolve(new TextDecoder().decode(request.result.filesystem.entries.find((entry: { path: string }) => entry.path === "main.py").data));
+          request.onerror = () => reject(request.error);
+        };
+        selected.onerror = () => reject(selected.error);
       });
     } finally { db.close(); }
   });

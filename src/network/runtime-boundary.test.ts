@@ -15,6 +15,21 @@ it("rejects invalid network messages and channel layouts", () => {
   expect(isMainToWorkerMessage({ version, type: "start", networkChannel: new SharedArrayBuffer(4) })).toBe(false);
   expect(isMainToWorkerMessage({ version, type: "start", networkChannel: new ArrayBuffer(NETWORK_CHANNEL_BYTES) })).toBe(false);
 });
+it("does not expose a network channel to an arm runtime", async () => {
+  const { SharedArmChannel, CONTROL_VERSION } = await import("../control/channel");
+  const { DEFAULT_ARM_CONTROL } = await import("../physics/arm-control");
+  const current = worker();
+  const client = new RuntimeClient({ onMessage: vi.fn(), onStatus: vi.fn() }, () => current, {
+    runtimeProfile: { kind: "arm", version: CONTROL_VERSION, identity: { setId: "set", generation: 1, runId: "run" }, conditions: DEFAULT_ARM_CONTROL, buffer: SharedArmChannel.create(1).buffer },
+  });
+  const dispatch = vi.spyOn(client.network, "dispatch");
+  client.start();
+  expect(current.sent[0]).not.toHaveProperty("networkChannel");
+  await current.onmessage?.({ data: { version, type: "network-request", requestId: 1, data: "{}" } } as MessageEvent);
+  expect(dispatch).not.toHaveBeenCalled();
+  expect(client.status).toBe("error");
+  client.stop();
+});
 it("never writes a delayed response into a replacement Worker channel", async () => {
   const first = worker(), second = worker();
   const factory = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);

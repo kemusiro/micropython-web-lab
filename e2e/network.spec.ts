@@ -119,6 +119,19 @@ test("network adapters also work from the REPL", async ({ page }) => {
   await expect(page.locator("#terminal")).toContainText("network-repl False");
 });
 
+test("private network RPC exposes no JavaScript prototype or constructor path", async ({ page }) => {
+  await page.goto("/"); await expect(page.locator("#runtime-status")).toHaveText("実行可能");
+  await page.locator("#code-editor").fill(`import _web_lab_network as bridge
+for target in (bridge, bridge.request, bridge.request.call):
+ for name in ('constructor', '__proto__', 'prototype', 'apply', 'bind'):
+  assert not hasattr(target, name), name
+print('network-rpc-isolated')
+`);
+  await page.locator("#run-script-button").click();
+  await expect(page.locator("#terminal")).toContainText("network-rpc-isolated");
+  await expect(page.locator("#runtime-status")).toHaveText("実行可能");
+});
+
 test("registered HTTPS goes through permission and returns the response to Python", async ({ page }) => {
   let posted = false;
   await page.route("https://httpbin.org/post", async route => {

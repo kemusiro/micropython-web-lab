@@ -29,7 +29,7 @@ export interface ConnectionEditorOptions {
   readonly readOnly?: boolean;
   readonly initialMessage?: string;
   validate(graph: ConnectionGraphV1): string | null;
-  apply(graph: ConnectionGraphV1): ConnectionEditorApplyResult;
+  apply(graph: ConnectionGraphV1): ConnectionEditorApplyResult | Promise<ConnectionEditorApplyResult>;
 }
 
 interface EditableDevice {
@@ -78,6 +78,7 @@ export class ConnectionEditor {
   #boardScrollListener: (() => void) | null = null;
   #boardScrollTop = 0;
   #dragState: ConnectionDragState | null = null;
+  #generation = 0;
 
   constructor(root: HTMLElement, options: ConnectionEditorOptions) {
     this.#root = root;
@@ -99,6 +100,13 @@ export class ConnectionEditor {
         return [{ ...editable.definition, ports: editable.ports }];
       }),
     });
+  }
+
+  restore(applied: ConnectionGraphV1, draft?: ConnectionGraphV1): void {
+    this.#generation++;
+    this.#appliedGraph = cloneGraph(applied);
+    this.#resetState(draft ?? applied);
+    this.#render(t("connection.current"));
   }
 
   /** Reflect a connection made by an experiment while retaining other pending edits. */
@@ -190,14 +198,20 @@ export class ConnectionEditor {
     apply.type = "button";
     apply.textContent = t("connection.apply");
     apply.disabled = this.#options.readOnly === true || !dirty || validationError !== null;
-    apply.addEventListener("click", () => {
+    apply.addEventListener("click", async () => {
+      const generation = this.#generation;
       const pendingGraph = this.graph();
-      const result = this.#options.apply(pendingGraph);
+      apply.disabled = true;
+      let result: ConnectionEditorApplyResult;
+      try { result = await this.#options.apply(pendingGraph); }
+      catch (error) { result = { ok: false, message: error instanceof Error ? error.message : String(error) }; }
+      if (generation !== this.#generation) return;
       if (result.ok) {
         this.#appliedGraph = cloneGraph(pendingGraph);
         this.#render(result.message, "saved");
       } else {
         this.#showStatus(result.message, "error");
+        apply.disabled = false;
       }
     });
     actions.append(reset, discard, apply);

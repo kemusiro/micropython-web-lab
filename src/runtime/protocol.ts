@@ -1,3 +1,4 @@
+import { snapshotArmProfile, type ArmRuntimeProfile } from "../control/channel";
 import { isYmCommand, type YmCommand } from "../audio/ym2203-protocol";
 import { NETWORK_CHANNEL_BYTES, NETWORK_REQUEST_BYTES } from "../network/contracts";
 import {
@@ -19,7 +20,7 @@ import {
 } from "../device-api/types";
 import { validateProjectSnapshot, projectPath, type ProjectSnapshot } from "../project/filesystem";
 
-export const RUNTIME_PROTOCOL_VERSION = 16 as const;
+export const RUNTIME_PROTOCOL_VERSION = 17 as const;
 export const MAX_SCRIPT_CHARACTERS = 200_000;
 export const MAX_DEBUGGER_GLOBALS = 100;
 export const MAX_DEBUGGER_VARIABLE_NAME_CHARACTERS = 128;
@@ -48,6 +49,7 @@ export type MainToWorkerMessage =
   | {
       version: typeof RUNTIME_PROTOCOL_VERSION;
       type: "start";
+      runtimeProfile?: ArmRuntimeProfile;
       deviceInputs?: SharedDeviceInputTransfer;
       debuggerChannel?: DebuggerChannelTransfer;
       connectionGraph?: ConnectionGraphV1;
@@ -76,6 +78,7 @@ export type WorkerToMainMessage =
       version: typeof RUNTIME_PROTOCOL_VERSION;
       type: "ready";
       micropythonVersion: string;
+      capabilities?: readonly "arm-control-v1"[];
       runtimeBuild: {
         sourceVersion: string;
         sourceCommit: string;
@@ -150,6 +153,7 @@ export function isWorkerToMainMessage(value: unknown): value is WorkerToMainMess
     case "ready":
       return (
         typeof value.micropythonVersion === "string" &&
+        (value.capabilities === undefined || (Array.isArray(value.capabilities) && value.capabilities.length <= 1 && value.capabilities.every(capability => capability === "arm-control-v1"))) &&
         isRecord(value.runtimeBuild) &&
         isNonEmptyString(value.runtimeBuild.sourceVersion) &&
         isCommitHash(value.runtimeBuild.sourceCommit) &&
@@ -204,6 +208,10 @@ export function isMainToWorkerMessage(value: unknown): value is MainToWorkerMess
   try {
     if (value.type === "start") {
       if (value.networkChannel !== undefined && (typeof SharedArrayBuffer === "undefined" || !(value.networkChannel instanceof SharedArrayBuffer) || value.networkChannel.byteLength !== NETWORK_CHANNEL_BYTES)) return false;
+      if (value.runtimeProfile !== undefined) {
+        snapshotArmProfile(value.runtimeProfile);
+        if (value.connectionGraph !== undefined || value.deviceInputs !== undefined || value.debuggerChannel !== undefined || value.networkChannel !== undefined) return false;
+      }
       if (value.project !== undefined) validateProjectSnapshot(value.project);
       if (value.filesystemGate !== undefined && (!(value.filesystemGate instanceof SharedArrayBuffer) || value.filesystemGate.byteLength !== 4)) return false;
       return true;

@@ -306,6 +306,9 @@ export class SharedDeviceInputs {
     return used;
   }
 
+  /** Only call after the consumer Worker has been terminated. */
+  reset(): void { this.#initialize(); }
+
   #initialize(): void {
     Atomics.store(this.#controls, MAGIC_SLOT, FORMAT_MAGIC);
     Atomics.store(this.#controls, FORMAT_VERSION_SLOT, SHARED_DEVICE_INPUT_FORMAT_VERSION);

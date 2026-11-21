@@ -104,17 +104,17 @@ RuntimeClientを再生成しない。配線の適用によるWorker再生成は�
 表示レイヤーによって入力・保存・Tab操作を変更しない。構文解析や文字列内の式の色分けは行わない。
 実験画面の狭い表示でも入力欄と色分けに同じフォントサイズ・行高を使用する。
 
-現行のWorker通信はv15で、pdbの`break`／`clear`による変更を`debugger-breakpoints`で通知する。
+現行のWorker通信はv16で、pdbの`break`／`clear`による変更を`debugger-breakpoints`で通知する。
 実行IDとデバッグ停止状態を検査した上で行番号欄へ赤い丸を表示し、停止行には黄色い矢印を併記する。
 ブレークポイントは再開中も維持し、実行終了・Worker再生成では消去する。保存形式は変更しない。
-詳細とv14からの更新方針は[ADR 0036](adr/0036-add-editor-highlighting-and-breakpoint-markers.md)を参照する。
+ブレークポイント通知はv15で導入した。詳細とv14からの更新方針は[ADR 0036](adr/0036-add-editor-highlighting-and-breakpoint-markers.md)を参照する。
 
 コードエディタは複数タブを扱い、ブラウザ内の版付き保存形式へ下書きを保存する。仮想デバイスのサンプルは
 既存コードを上書きせず、パスを持たない「無題」タブとして追加する。すべてのタブの自動保存は復元用の
 下書きだけを更新し、ファイル本体へ反映しない。実行はバッファを渡し、importとopenは保存済みファイルを
 使う。ZIP出力でもバッファをファイルへ反映しない。明示的な保存時に、ファイルとタブの紐づけを
 同じIndexedDBトランザクションで保存し、成功後に画面とWorker側のファイル一覧を更新する。
-既存の初期・旧形式ワークスペースの取り込み時だけ、従来のファイル名割り当てを維持する。保存形式は変更しない。
+既存の初期・旧形式ワークスペースの取り込み時だけ、従来のファイル名割り当てを維持する。
 
 ファイル操作はツリーの選択と操作ごとの入力ダイアログを使う。名前変更は同じ親の中で行い、
 ディレクトリ作成は選択中のディレクトリへ追加し、ファイル選択時はその親へ追加する。
@@ -136,6 +136,17 @@ IndexedDBへ書き込み中のファイルと、最後に保存できたファ�
 分けて復元し、新しいlocalStorage退避記録もtabsだけに適用する。初回の旧形式取り込み以外で下書きを
 ファイルへ昇格させない。保存形式は変更しない。
 
+通常版は`ExperimentStore`と`ExperimentCoordinator`を使い、右ペインから題材の利用者用コピーを
+開く。`ProjectWorkspace`はセットIDと世代に固定した`ProjectPersistence`へ保存する。
+閲覧中は実行を維持し、セット切替ではWorker、音声、入力を停止・初期化してファイルと構成を一括反映する。
+起動だけではコードを実行しない。旧プロジェクトは一度だけ移行し、原本を保持する。
+コードバッファと保存済みファイルは分離し、配線の候補、カード順・折りたたみもセットごとに保存する。
+処理中1件と最新の待機1件に保存を集約し、保存失敗と競合は編集を残して表示する。
+ローカルDevice開発は旧単一プロジェクト経路を別オリジンで使う。
+詳細は[実験セットの基盤](experiment-set-foundation.md)、
+[ADR 0051](adr/0051-add-transactional-experiment-set-storage.md)、
+[ADR 0052](adr/0052-connect-experiment-sets-to-the-workspace.md)を参照する。
+
 REPLは出力画面モデルと不可視のブラウザ入力要素を分ける。MicroPython側を入力・履歴の正本とし、
 ブラウザは確定した文字と制御キーだけをWorkerへ送る。応答しない実行中の停止は、MicroPythonの協調動作に
 依存せずWorker再生成として扱う。
@@ -143,6 +154,29 @@ REPLは出力画面モデルと不可視のブラウザ入力要素を分ける�
 デバッグ実行は通常実行と明示的に分ける。安定版MicroPythonで利用できる`sys.settrace()`を用い、pdbに近い
 コマンドとGUI操作を同じコマンド経路へ送る。停止位置と上限付きグローバル変数スナップショットをUIへ表示し、
 デバッグ停止中は実行中ソースとの対応を保つ。
+
+## 物理モデルの境界
+
+`src/physics`の一軸アームは、ボードやMicroPython、DOM、実時間から独立した数値モデルである。
+`OneAxisArm.step`一回で10 msを進め、1 msのRK4で積分する。状態と区間トルクの記録を分け、
+モデル版、パラメータ、予定tick数、完了・停止状態を保持する。検証用のPD参照制御器を持つが、
+参照計算と実際のPython実行は分けて扱う。E5の本番画面はE4の実行結果を表示する。
+詳細と適用範囲は[物理モデル](arm-physics.md)、
+[ADR 0053](adr/0053-add-a-deterministic-one-axis-arm-model.md)を参照する。
+
+## モデル型の同期実行
+
+E4の`ArmRuntimeSession`は、明示的なarm Profileを持つMicroPython WorkerとSimulation Workerを所有する。
+Runtime Protocol 16と`arm-control-v1`の能力を確認し、共有領域の要求・完了番号で同期する。
+Pythonへ公開するのは実験専用の操作だけで、ボード構成や汎用JavaScriptを渡さない。
+起動・通信の期限、世代、観測の上限を検査し、停止時は両Workerを破棄して確定済み記録とファイルを回収する。
+通常画面は`WorkspaceRuntime`がボードとモデルの実行先を切り替え、E5でカタログ・保存・描画へ接続する。
+モデルのWorkerペアは実行要求で生成し、毎回最新の保存済みファイルと条件を渡す。
+`ArmRecording`が観測を表示用へ複製し、`ArmExperimentView`のSVG、グラフ、時刻選択へ渡す。
+表示の間引き・系列の選択・探索は物理tickを操作しない。
+条件と表示だけをセットへ保存し、実行系列はページ内に保持する。
+詳細は[実行基盤](arm-runtime.md)、[ADR 0054](adr/0054-connect-micropython-to-a-simulation-worker.md)を参照する。
+実験画面と保存契約の追加は[一軸アーム画面](arm-workspace.md)、[ADR 0055](adr/0055-show-arm-experiments-in-the-workspace.md)を参照する。
 
 ## ローカルDevice開発
 

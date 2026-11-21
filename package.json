@@ -17,6 +17,7 @@
     "test:notices": "node scripts/verify-third-party-notices.mjs && node scripts/verify-ymfm.mjs",
     "test": "pnpm build:sdk && vitest run src packages/device-api/src packages/device-testkit/src templates/device",
     "test:e2e": "playwright test",
+    "test:e2e:experiments": "playwright test --config playwright.experiments.config.ts",
     "test:e2e:local-device": "playwright test --config playwright.local-device.config.ts",
     "test:e2e:local-devices": "playwright test --config playwright.local-devices.config.ts",
     "check:device": "node scripts/check-device.mjs",
@@ -24,7 +25,7 @@
     "verify:device-template": "pnpm build:sdk && pnpm build:device-template && pnpm check:device -- templates/device/i2c-register",
     "verify:local-devices": "pnpm check:devices -- fixtures/local-devices/bme280-ssd1331/web-lab.local.json",
     "verify:local-device-errors": "pnpm build:sdk && node scripts/verify-local-device-errors.mjs",
-    "check": "pnpm test:deployment && pnpm test:headers && pnpm test:runtime && pnpm test:notices && pnpm test && pnpm build && pnpm verify:device-template && pnpm verify:local-devices && pnpm verify:local-device-errors && pnpm test:e2e && pnpm test:e2e:local-device && pnpm test:e2e:local-devices && pnpm build:sakura",
+    "check": "pnpm test:deployment && pnpm test:headers && pnpm test:runtime && pnpm test:notices && pnpm test && pnpm build && pnpm verify:device-template && pnpm verify:local-devices && pnpm verify:local-device-errors && pnpm test:e2e:experiments && pnpm test:e2e && pnpm test:e2e:local-device && pnpm test:e2e:local-devices && pnpm build:sakura",
     "build:sakura": "pnpm build:sdk && tsc --noEmit && vite build --base=./ && node scripts/verify-managed-build.mjs && node scripts/prepare-sakura.mjs",
     "verify:deployment": "node scripts/verify-deployment.mjs",
     "test:deployment": "node --test scripts/sakura-deployment.test.mjs scripts/managed-build.test.mjs"

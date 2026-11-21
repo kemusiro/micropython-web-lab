@@ -138,11 +138,29 @@ Pythonの固定ヒープ・実行権限を拡張せず、同期JSプロキシ内
 
 ## ネットワーク実験の追加境界
 
-[ADR 0051](adr/0051-add-bounded-network-experiments.md)でアプリだけに限定ネットワーク互換層を追加する。
+[ADR 0056](adr/0056-add-bounded-network-experiments.md)でアプリだけに限定ネットワーク互換層を追加する。
 WASM単体のjs/jsffi/socket/network禁止は継続する。Pythonから呼べる内部RPCも信頼せず、ホスト側で
-宛先、権限、型、容量、トピックを検証する。Runtime Protocol v16のWorker別共有領域と要求IDで
+宛先、権限、型、容量、トピックを検証する。Runtime Protocol v17のWorker別共有領域と要求IDで
 古い応答を破棄する。メインスレッドは待機しない。Worker停止時にHTTPとMQTTも中断する。
+内部RPCのモジュール・関数・呼出しアダプターはnullプロトタイプでfreezeし、JsProxyの属性探索から
+JavaScriptのコンストラクターや汎用ヘルパーへ到達する経路を閉じる。
 CSPのconnect-srcへ固定3オリジンを追加するため、配信ヘッダーの更新が必要。
 NTPは仮想処理であり、外部UDPを追加しない。Device Modelへ通信能力を渡さない。
 設定ファイルは既存ProjectSnapshot内の版付きJSONで、形式と2 KiB上限を検査し、不正時は既定へ戻す。
 許可、接続、通信履歴、非公開認証情報は保存しない。詳細と制約は[ネットワーク仕様](network-v1.md)。
+
+## 一軸アームのモデル型Profile（E4）
+
+Runtime Protocol 17の明示的なarm Profileだけで、実験用`weblab.control`を登録する。
+新しい私有ホストモジュールは固定操作のディスパッチとJSONに限定し、共有メモリ、Worker、
+ボード、DOM、ストレージ、任意ネットワークをPythonへ公開しない。モジュールと関数は
+nullプロトタイプでfreezeし、固定版JsProxyの属性探索からFunction/Objectへ到達する経路を閉じる。
+実行・世代を固定し、一回の実行後のハンドルを無効にする。
+
+共有領域は96,168バイト、観測は最大1,001点。要求・完了番号、世代、版、有限値と容量を検査する。
+起動10秒、step通信1秒の期限と、両Workerの外部破棄を持つ。stepを呼ばない無限ループの
+実行時間を自動制限するものではない。通常画面はE5の`WorkspaceRuntime`を経由して接続する。
+保存したモデルのID・版・条件・表示を許可リストで検査し、任意のビューやコードをレコードから読込まない。
+SVGは固定コンポーネントだけで生成し、観測から受け取る文字列をSVGマークアップとして扱わない。
+表示設定はモデルへ戻さず、Pythonへ渡す権限も増やさない。
+[境界と検証](arm-runtime.md)と[ADR 0054](adr/0054-connect-micropython-to-a-simulation-worker.md)を参照する。

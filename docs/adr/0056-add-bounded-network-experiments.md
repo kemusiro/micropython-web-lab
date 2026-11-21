@@ -1,4 +1,4 @@
-# ADR 0051: ホスト管理の仮想ネットワークと登録済み外部通信を追加する
+# ADR 0056: ホスト管理の仮想ネットワークと登録済み外部通信を追加する
 
 - 状態: Accepted
 - 日付: 2026-10-29
@@ -24,7 +24,9 @@ NTPは仮想RTCを設定するだけで、実UDPやPC時計の変更は行わな
 
 ADR 0010のWASM単体の禁止モジュール検査は継続し、アプリでは限定network/socketを登録する。
 アプリE2Eでは単なるimport拒否から、許可なし外部通信・UDP・任意宛先の拒否へ検査を変更する。
-Runtime Protocolはv15からv16へ更新。startにnetworkChannelを追加し、network-requestを追加する。
+Runtime Protocolはv16からv17へ更新。startにnetworkChannelを追加し、network-requestを追加する。
+内部RPCはモジュール・関数・呼出しアダプターのプロトタイプを除去してfreezeする。
+モデル型のarm ProfileにはnetworkChannelを渡さず、混在した起動要求も拒否する。
 配信はCSP connect-srcへ3つの固定外部オリジンを追加するため、Nginx/静的配布のヘッダーも更新する。
 他の権限、クロスオリジン分離、Worker停止方式、Device APIは変更しない。
 
