@@ -10,9 +10,10 @@ test("missing isolation visibly disables shared inputs while REPL remains usable
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
     await expect(page.locator("#device-ui-input-status")).toHaveAttribute("data-state", "unavailable");
     await expect(page.locator('[data-device-instance="analog-gp26"] input[type="range"]')).toBeDisabled();
-    await page.locator("#repl-input").fill('print("fallback", 42)');
+    await page.locator("#repl-input").fill('import time, network\nprint("fallback", 42, time.time() > 0)\ntry:\n network.WLAN().active(True)\nexcept OSError as error:\n print("network-unavailable", error.args[0])');
     await page.locator("#send-button").click();
-    await expect(page.locator("#terminal")).toContainText("fallback 42");
+    await expect(page.locator("#terminal")).toContainText("fallback 42 True");
+    await expect(page.locator("#terminal")).toContainText("network-unavailable 38");
   } finally { await server.close(); }
 });
 

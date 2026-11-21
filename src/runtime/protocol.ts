@@ -1,4 +1,5 @@
 import { isYmCommand, type YmCommand } from "../audio/ym2203-protocol";
+import { NETWORK_CHANNEL_BYTES, NETWORK_REQUEST_BYTES } from "../network/contracts";
 import {
   MAX_VIRTUAL_ADC_VALUE,
   type VirtualDeviceState,
@@ -18,7 +19,7 @@ import {
 } from "../device-api/types";
 import { validateProjectSnapshot, projectPath, type ProjectSnapshot } from "../project/filesystem";
 
-export const RUNTIME_PROTOCOL_VERSION = 15 as const;
+export const RUNTIME_PROTOCOL_VERSION = 16 as const;
 export const MAX_SCRIPT_CHARACTERS = 200_000;
 export const MAX_DEBUGGER_GLOBALS = 100;
 export const MAX_DEBUGGER_VARIABLE_NAME_CHARACTERS = 128;
@@ -52,6 +53,7 @@ export type MainToWorkerMessage =
       connectionGraph?: ConnectionGraphV1;
       project?: ProjectSnapshot;
       filesystemGate?: SharedArrayBuffer;
+      networkChannel?: SharedArrayBuffer;
     }
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "input"; requestId: string; data: string }
   | {
@@ -65,6 +67,7 @@ export type MainToWorkerMessage =
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "project-sync"; project: ProjectSnapshot };
 
 export type WorkerToMainMessage =
+  | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "network-request"; requestId: number; data: string }
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "prototype-audio"; command: YmCommand }
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "repl-executing" | "repl-ready"; requestId: string }
   | { version: typeof RUNTIME_PROTOCOL_VERSION; type: "filesystem"; project: ProjectSnapshot; revision: number; checkpoint: boolean }
@@ -133,6 +136,7 @@ export function isWorkerToMainMessage(value: unknown): value is WorkerToMainMess
   }
 
   switch (value.type) {
+    case "network-request": return typeof value.requestId === "number" && Number.isSafeInteger(value.requestId) && value.requestId > 0 && typeof value.data === "string" && new TextEncoder().encode(value.data).length <= NETWORK_REQUEST_BYTES;
     case "prototype-audio": return isYmCommand(value.command);
     case "filesystem":
       try { validateProjectSnapshot(value.project); } catch { return false; }
@@ -199,6 +203,7 @@ export function isMainToWorkerMessage(value: unknown): value is MainToWorkerMess
   if (!isRecord(value) || value.version !== RUNTIME_PROTOCOL_VERSION) return false;
   try {
     if (value.type === "start") {
+      if (value.networkChannel !== undefined && (typeof SharedArrayBuffer === "undefined" || !(value.networkChannel instanceof SharedArrayBuffer) || value.networkChannel.byteLength !== NETWORK_CHANNEL_BYTES)) return false;
       if (value.project !== undefined) validateProjectSnapshot(value.project);
       if (value.filesystemGate !== undefined && (!(value.filesystemGate instanceof SharedArrayBuffer) || value.filesystemGate.byteLength !== 4)) return false;
       return true;

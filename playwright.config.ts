@@ -1,5 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = Number(process.env.WEB_LAB_E2E_PORT ?? 4173);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid WEB_LAB_E2E_PORT");
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./e2e",
   testIgnore: ["local-device.spec.ts", "local-devices.spec.ts"],
@@ -11,7 +15,7 @@ export default defineConfig({
   },
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL,
     locale: "ja-JP",
     trace: "retain-on-failure",
   },
@@ -22,8 +26,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm build && pnpm preview",
-    url: "http://127.0.0.1:4173",
+    command: `pnpm build && pnpm preview --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: false,
     timeout: 30_000,
   },

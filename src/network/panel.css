@@ -1,0 +1,11 @@
+.network-panel { border: 1px solid var(--border-color, #bcc7d3); border-radius: .5rem; padding: .7rem; margin-block: .5rem; min-width: 0; }
+.network-panel summary { cursor: pointer; font-weight: 600; }
+.network-panel fieldset { margin-block: .7rem; padding: .6rem; min-width: 0; border: 1px solid #bcc7d3; }
+.network-panel label { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-block: .4rem; font-size: .85rem; }
+.network-panel input:not([type=checkbox]), .network-panel select, .network-panel textarea { max-width: 100%; min-width: 0; }
+.network-panel textarea { width: 100%; }
+.network-panel button { margin: .2rem; }
+.network-panel pre, .network-panel code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
+.network-panel pre { max-height: 14rem; overflow: auto; }
+.network-panel p { font-size: .85rem; }
+.network-panel .network-state { font-weight: 600; }

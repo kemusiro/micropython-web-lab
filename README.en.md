@@ -204,10 +204,19 @@ deployment workflow also supports Basic-authenticated rehearsals. See the
 [deployment guide (Japanese)](docs/deployment.md) for deployment, HTTPS configuration, and post-deployment
 verification.
 
+## Network experiments
+
+The Network panel provides virtual WiFi, HTTP clients and servers, MQTT and virtual NTP examples.
+External access is off by default. Grant individual registered HTTPS services (httpbin, Open-Meteo) or
+MQTT (the public shiftr.io instance) after preparing your code. Local PC/LAN and arbitrary UDP are unavailable.
+Public MQTT messages can be read or changed by others; send public demo data only. Virtual NTP changes
+only the virtual RTC. Project settings use `.weblab-network.json`; permissions and credentials are not exported.
+See the [network specification (Japanese)](docs/network-v1.md) for APIs, limits and deployment changes.
+
 ## Security and privacy
 
 MicroPython code runs in the browser. During normal use, editor content and REPL history are not sent to
-the server. User code is not given access to the DOM, unrestricted networking, or all browser storage.
+the server. Explicitly permitted external requests send their request data to the destination. User code is not given access to the DOM, unrestricted networking, or all browser storage.
 Browser-side execution alone does not, however, guarantee a complete sandbox.
 
 See the [threat model (Japanese)](docs/threat-model.md) for the trust boundaries and known limitations, and

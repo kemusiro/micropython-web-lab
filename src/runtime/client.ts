@@ -1,4 +1,7 @@
 import { MAX_RUNTIME_OUTPUT_CHARACTERS } from "./output-buffer";
+import { NetworkHost } from "../network/host";
+import { NETWORK_CHANNEL_BYTES, NETWORK_RESPONSE_BYTES } from "../network/contracts";
+import { readNetworkSettings } from "../network/project-settings";
 import {
   RUNTIME_PROTOCOL_VERSION,
   isWorkerToMainMessage,
@@ -45,6 +48,9 @@ export interface RuntimeClientOptions {
 }
 
 export class RuntimeClient {
+  readonly network = new NetworkHost();
+  #networkChannel: SharedArrayBuffer | undefined;
+  #networkRequestId = 0;
   #project: ProjectSnapshot | undefined;
   #filesystemGate: Int32Array | undefined;
   #filesystemRevision = 0;
@@ -97,6 +103,8 @@ export class RuntimeClient {
 
   #startWorker(): void {
     this.#discardWorker();
+    this.#networkChannel = typeof SharedArrayBuffer === "undefined" ? undefined : new SharedArrayBuffer(NETWORK_CHANNEL_BYTES);
+    this.#networkRequestId = 0;
     this.#debuggerChannel?.reset();
     this.#filesystemRevision = 0;
     this.#pendingCheckpoint = null;
@@ -113,6 +121,19 @@ export class RuntimeClient {
 
       if (!isWorkerToMainMessage(event.data)) {
         this.#reportClientError("Workerから不正なメッセージを受信しました。");
+        return;
+      }
+      if (event.data.type === "network-request") {
+        const channel = this.#networkChannel;
+        if (!channel || event.data.requestId !== this.#networkRequestId + 1) { this.#reportClientError("Network request sequence is invalid."); return; }
+        this.#networkRequestId = event.data.requestId;
+        const response = await this.network.dispatch(event.data.data);
+        if (worker !== this.#worker || channel !== this.#networkChannel) return;
+        let bytes = new TextEncoder().encode(response);
+        if (bytes.length > NETWORK_RESPONSE_BYTES) bytes = new TextEncoder().encode('{"ok":false,"code":105,"message":"Network response exceeds budget"}');
+        new Uint8Array(channel, 8).set(bytes);
+        const header = new Int32Array(channel, 0, 2);
+        Atomics.store(header, 1, bytes.length); Atomics.store(header, 0, 1); Atomics.notify(header, 0);
         return;
       }
       if (event.data.type === "filesystem") {
@@ -237,6 +258,7 @@ export class RuntimeClient {
     worker.postMessage({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      ...(this.#networkChannel === undefined ? {} : { networkChannel: this.#networkChannel }),
       ...(this.#project === undefined ? {} : { project: this.#project }),
       ...(this.#filesystemGate === undefined ? {} : { filesystemGate: this.#filesystemGate.buffer as SharedArrayBuffer }),
       ...(this.#deviceInputs === undefined
@@ -257,6 +279,11 @@ export class RuntimeClient {
 
   setProject(project: ProjectSnapshot): void {
     validateProjectSnapshot(project);
+    if (this.#project !== undefined && !sameProject(this.#project, project)) this.network.revoke();
+    try {
+      const settings = readNetworkSettings(project);
+      if (JSON.stringify(settings) !== JSON.stringify(this.network.settings)) this.network.configure(settings);
+    } catch { this.network.resetExperiment(); this.network.configure(readNetworkSettings({ version: 1, entries: [] })); this.#handlers.onMessage({ version: RUNTIME_PROTOCOL_VERSION, type: "error", message: "Invalid network settings; simulation defaults restored." }); }
     this.#project = structuredClone(project);
     if (this.#worker && this.#status === "ready" && this.#activeOperation === null) this.#worker.postMessage({ version: RUNTIME_PROTOCOL_VERSION, type: "project-sync", project: this.#project });
   }
@@ -326,6 +353,7 @@ export class RuntimeClient {
   }
 
   #discardWorker(): void {
+    this.network.resetSession();
     if (this.#worker === null) {
       return;
     }
@@ -456,6 +484,13 @@ export class RuntimeClient {
     this.#status = status;
     this.#handlers.onStatus(status);
   }
+}
+
+function sameProject(a: ProjectSnapshot, b: ProjectSnapshot): boolean {
+  return a.entries.length === b.entries.length && a.entries.every((entry, i) => {
+    const other = b.entries[i];
+    return other?.path === entry.path && other.kind === entry.kind && (entry.kind !== "file" || (other.kind === "file" && entry.data.length === other.data.length && entry.data.every((byte, j) => byte === other.data[j])));
+  });
 }
 
 function createRuntimeWorker(): RuntimeWorker {

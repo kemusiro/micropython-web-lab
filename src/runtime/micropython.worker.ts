@@ -60,6 +60,8 @@ import type { ConnectionGraphV1 } from "../connections/connection-model";
 import { localDeviceBundle } from "virtual:local-device";
 import { RuntimeProjectFilesystem } from "./project-filesystem";
 import type { ProjectSnapshot } from "../project/filesystem";
+import { NETWORK_CHANNEL_BYTES, NETWORK_REQUEST_BYTES, NETWORK_RESPONSE_BYTES } from "../network/contracts";
+import { NETWORK_PYTHON_SOURCE } from "../network/python-modules";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -88,7 +90,7 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
 
   switch (message.type) {
     case "start":
-      void startRuntime(message.deviceInputs, message.debuggerChannel, message.connectionGraph, message.project, message.filesystemGate);
+      void startRuntime(message.deviceInputs, message.debuggerChannel, message.connectionGraph, message.project, message.filesystemGate, message.networkChannel);
       break;
     case "input":
       if (scriptExecuting || queuedInputCharacters + message.data.length > MAX_SCRIPT_CHARACTERS) { postError("Runtime input queue is busy or full."); break; }
@@ -114,6 +116,7 @@ async function startRuntime(
   requestedConnectionGraph?: ConnectionGraphV1,
   project: ProjectSnapshot = { version: 1, entries: [] },
   filesystemGate?: SharedArrayBuffer,
+  networkChannel?: SharedArrayBuffer,
 ): Promise<void> {
   if (micropython !== null || starting) {
     postError("MicroPythonランタイムは既に起動しています。");
@@ -336,6 +339,7 @@ async function startRuntime(
     );
     installMachineBufferAdapters(micropython);
     installDebugger(micropython);
+    installNetworkModules(micropython, networkChannel);
     projectFilesystem = new RuntimeProjectFilesystem(micropython.FS, project, filesystemGate,
       (snapshot, revision, checkpoint) => postMessageToMain({ version: RUNTIME_PROTOCOL_VERSION, type: "filesystem", project: snapshot, revision, checkpoint }));
     micropython.runPython("__import__('sys').path[:] = ['/project', '/project/lib']");
@@ -562,6 +566,24 @@ function postMessageToMain(message: WorkerToMainMessage): void {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
+function installNetworkModules(runtime: MicroPythonInstance, channel?: SharedArrayBuffer): void {
+  let requestId = 0;
+  runtime.registerJsModule("_web_lab_network", {
+    request(data: unknown): string {
+      if (!channel || channel.byteLength !== NETWORK_CHANNEL_BYTES) return '{"ok":false,"code":38,"message":"Networking requires cross-origin isolation and shared memory"}';
+      if (typeof data !== "string" || new TextEncoder().encode(data).length > NETWORK_REQUEST_BYTES) return '{"ok":false,"code":105,"message":"Network request exceeds budget"}';
+      const header = new Int32Array(channel, 0, 2);
+      Atomics.store(header, 0, 0); Atomics.store(header, 1, 0);
+      self.postMessage({ version: RUNTIME_PROTOCOL_VERSION, type: "network-request", requestId: ++requestId, data });
+      while (Atomics.load(header, 0) === 0) Atomics.wait(header, 0, 0);
+      const length = Atomics.load(header, 1);
+      if (length < 0 || length > NETWORK_RESPONSE_BYTES) return '{"ok":false,"code":71,"message":"Invalid network response"}';
+      return new TextDecoder().decode(new Uint8Array(channel, 8, length).slice());
+    },
+  });
+  runtime.runPython(`exec(${JSON.stringify(NETWORK_PYTHON_SOURCE)}, {'_network_available': ${channel === undefined ? "False" : "True"}})`);
 }
 
 function installMachineBufferAdapters(runtime: MicroPythonInstance): void {

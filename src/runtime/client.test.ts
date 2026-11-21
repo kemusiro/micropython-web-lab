@@ -93,6 +93,7 @@ describe("RuntimeClient", () => {
     expect(worker.postMessage).toHaveBeenCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
     });
     expect(client.sendInput("1 + 2\n")).toBe(false);
 
@@ -122,6 +123,7 @@ describe("RuntimeClient", () => {
     expect(worker.postMessage).toHaveBeenCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
       deviceInputs,
     });
   });
@@ -142,6 +144,7 @@ describe("RuntimeClient", () => {
     expect(secondWorker.postMessage).toHaveBeenCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
       connectionGraph: MANAGED_CONNECTION_GRAPH,
     });
   });
@@ -168,6 +171,7 @@ describe("RuntimeClient", () => {
     expect(secondWorker.postMessage).toHaveBeenCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
     });
   });
 
@@ -190,6 +194,7 @@ describe("RuntimeClient", () => {
     expect(secondWorker.postMessage).toHaveBeenCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
     });
     expect(onMessage).toHaveBeenCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
@@ -241,6 +246,7 @@ describe("RuntimeClient", () => {
     expect(secondWorker.postMessage).toHaveBeenCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
     });
     expect(onMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -296,6 +302,7 @@ describe("RuntimeClient", () => {
       expect(thirdWorker.postMessage).toHaveBeenCalledWith({
         version: RUNTIME_PROTOCOL_VERSION,
         type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
       });
       expect(client.status).toBe("starting");
     } finally {
@@ -510,6 +517,7 @@ describe("RuntimeClient", () => {
       expect(secondWorker.postMessage).toHaveBeenCalledWith({
         version: RUNTIME_PROTOCOL_VERSION,
         type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
       });
       expect(onMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: "error", message: expect.stringContaining("10秒") }),
@@ -549,6 +557,7 @@ describe("RuntimeClient", () => {
     expect(secondWorker.postMessage).toHaveBeenCalledWith({
       version: RUNTIME_PROTOCOL_VERSION,
       type: "start",
+      networkChannel: expect.any(SharedArrayBuffer),
     });
     expect(onMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "error", message: expect.stringContaining("出力量") }),
@@ -603,7 +612,7 @@ describe("Worker reset and output-limit control messages", () => {
       expect(first.terminate).toHaveBeenCalledOnce();
       expect(client.status).toBe("starting");
       expect(second.postMessage).toHaveBeenCalledWith({
-        version: RUNTIME_PROTOCOL_VERSION, type: "start", deviceInputs,
+        version: RUNTIME_PROTOCOL_VERSION, type: "start", networkChannel: expect.any(SharedArrayBuffer), deviceInputs,
         connectionGraph: MANAGED_CONNECTION_GRAPH,
       });
       onMessage.mockClear();

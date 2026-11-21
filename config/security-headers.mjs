@@ -2,7 +2,7 @@ export const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "base-uri 'none'",
   "child-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self' https://httpbin.org https://api.open-meteo.com wss://public.cloud.shiftr.io",
   "font-src 'none'",
   "form-action 'none'",
   "frame-ancestors 'none'",

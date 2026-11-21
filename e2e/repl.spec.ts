@@ -1575,7 +1575,7 @@ test("runs MicroPython and recovers by replacing an unresponsive worker", async 
   await expect(terminal).toContainText("Workerを再生成しています");
 });
 
-test("blocks unrestricted JavaScript and network modules", async ({ page }) => {
+test("blocks unrestricted JavaScript while keeping machine available", async ({ page }) => {
   await page.goto("/");
 
   const status = page.getByText("実行可能", { exact: true });
@@ -1585,7 +1585,7 @@ test("blocks unrestricted JavaScript and network modules", async ({ page }) => {
 
   await expect(status).toBeVisible();
 
-  for (const moduleName of ["js", "jsffi", "socket", "network"]) {
+  for (const moduleName of ["js", "jsffi"]) {
     await editor.fill(`import ${moduleName}`);
     await run.click();
     await expect(terminal).toContainText(`ImportError: no module named '${moduleName}'`);

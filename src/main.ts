@@ -1,5 +1,7 @@
 import "./styles.css";
 import { ProjectWorkspace } from "./project/workspace";
+import { NetworkPanel } from "./network/panel";
+import { NETWORK_SETTINGS_PATH } from "./network/project-settings";
 import { FilePanel } from "./project/file-panel";
 import { ProjectFiles, type ProjectSnapshot } from "./project/filesystem";
 
@@ -340,6 +342,19 @@ const filePanel = new FilePanel(requiredElement<HTMLElement>("project-files"), {
   busyChanged: () => updateRuntimeStatus(runtime.status),
 });
 
+const networkPanel = new NetworkPanel(runtime.network, {
+  locale: uiLocale,
+  openExample: (title, source) => { runtime.network.revoke(); openEditorTab(title, source); },
+  saveSettings: async (settings) => {
+    if (runtime.status !== "ready" || !projectWorkspace.loaded) throw new Error(t("files.wait"));
+    const files = new ProjectFiles(projectWorkspace.files.snapshot());
+    files.write(NETWORK_SETTINGS_PATH, new TextEncoder().encode(JSON.stringify(settings, null, 2)));
+    await changeProjectFiles(files.snapshot());
+  },
+});
+deviceUiRoot.insertAdjacentElement("beforebegin", networkPanel.element);
+window.addEventListener("pagehide", () => runtime.network.revoke());
+
 soundPanel.onState = state => {
   soundPatchEditor.setAudioState(state);
 };
@@ -574,6 +589,7 @@ resetDraftButton.addEventListener("click", () => {
   }
 
   editorTabs = [{ id: "main", title: "main.py", source: initialScript }];
+  runtime.network.revoke();
   activeEditorTabId = "main";
   codeEditor.value = initialScript;
   renderEditorTabs();
@@ -1088,6 +1104,7 @@ function restoreExperimentEditor(): void {
   const tab = [activeEditorTab(), ...editorTabs].find(candidate =>
     candidate.title === "ボタンの実験" || candidate.title === "Button experiment");
   if (tab !== undefined) {
+    runtime.network.revoke();
     buttonExperimentTabId = tab.id;
     activeEditorTabId = tab.id;
     codeEditor.value = tab.source;
@@ -1229,6 +1246,7 @@ function updateActiveEditorTabSource(source: string, edited = false): void {
     return;
   }
   if (!edited && source === editorTabs[index]!.source.replace(/\r\n?/g, "\n")) return;
+  runtime.network.revoke();
   editorTabs[index] = { ...editorTabs[index]!, source };
 }
 
@@ -1304,6 +1322,7 @@ function selectEditorTab(tabId: string): void {
   if (tab === undefined) {
     return;
   }
+  runtime.network.revoke();
   updateActiveEditorTabSource(codeEditor.value);
   activeEditorTabId = tab.id;
   codeEditor.value = tab.source;
@@ -1328,6 +1347,7 @@ function createEditorTab(title: string, source: string): boolean {
     return false;
   }
   updateActiveEditorTabSource(codeEditor.value);
+  runtime.network.revoke();
   editorTabSequence += 1;
   const id = `tab-${Date.now().toString(36)}-${editorTabSequence.toString(36)}`;
   editorTabs.push({ id, title: title.slice(0, 80), source });
@@ -1345,6 +1365,7 @@ function closeEditorTab(tabId: string): void {
   if (codeEditor.readOnly || editorTabs.length === 1) {
     return;
   }
+  runtime.network.revoke();
   updateActiveEditorTabSource(codeEditor.value);
   const index = editorTabs.findIndex((tab) => tab.id === tabId);
   const tab = editorTabs[index];
