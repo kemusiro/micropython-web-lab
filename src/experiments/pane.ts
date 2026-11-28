@@ -25,7 +25,7 @@ export class ExperimentPane {
   readonly #note = document.createElement("p");
   readonly #body = document.createElement("div");
   #record: ExperimentSet | null = null;
-  #screen: "work" | "categories" | "saved" | CategoryId = "work";
+  #screen: "work" | "featured" | "categories" | "saved" | CategoryId = "work";
   #navigation = 0;
   #busy = false;
   #running = false;
@@ -36,10 +36,12 @@ export class ExperimentPane {
     root.className = "experiment-pane";
     this.#scrollRoot = root.closest<HTMLElement>(".virtual-board-panel") ?? deviceRoot;
     const actions = document.createElement("div"); actions.className = "experiment-navigation";
-    actions.append(this.button(this.text("題材を選ぶ", "Choose a topic"), () => this.show("categories"), "experiment-browse"),
+    actions.append(this.button(this.text("代表の実験へ戻る", "Back to featured experiments"), () => this.show("featured"), "experiment-featured"),
+      this.button(this.text("題材を選ぶ", "Choose a topic"), () => this.show("categories"), "experiment-browse"),
       this.button(this.text("保存したセット", "Saved sets"), () => this.show("saved"), "experiment-saved"),
       this.button(this.text("作業へ戻る", "Back to work"), () => this.show("work"), "experiment-return"),
       this.button(this.text("データを退避", "Download recovery data"), () => this.action(this.options.backup), "experiment-emergency-backup"));
+    this.#body.tabIndex = -1;
     this.#name.id = "experiment-set-name";
     this.#status.id = "experiment-set-status"; this.#status.setAttribute("aria-live", "polite");
     this.#note.id = "experiment-switch-note";
@@ -65,7 +67,7 @@ export class ExperimentPane {
     if (running !== this.#running) {
       for (const create of this.#body.querySelectorAll<HTMLButtonElement>("[data-create-experiment]")) {
         create.textContent = running ? this.text("保存して切り替える（実行は停止）", "Save and switch (stops running code)")
-          : this.text("新しい実験セットを作る", "Create experiment set");
+          : this.text("この実験を開く", "Open this experiment");
       }
     }
     this.#running = running;
@@ -76,13 +78,16 @@ export class ExperimentPane {
     this.#retry.disabled = busy || this.#readOnly || !this.#record;
     for (const button of this.#body.querySelectorAll<HTMLButtonElement>("[data-experiment-write]")) button.disabled = busy || this.#readOnly;
   }
-  show(screen: "work" | "categories" | "saved" | CategoryId): void {
+  show(screen: "work" | "featured" | "categories" | "saved" | CategoryId): void {
     if (this.#screen === "work") this.#workScroll = this.#scrollRoot.scrollTop;
     this.#screen = screen;
-    if (screen !== "work") this.#scrollRoot.scrollTop = 0;
+    if (screen !== "work") (this.root.closest("dialog") ?? this.#scrollRoot).scrollTop = 0;
     const navigation = ++this.#navigation;
     this.deviceRoot.hidden = screen !== "work" || this.#record?.environment.kind === "model" || (this.#record?.view.section ?? "experience") !== "experience";
     this.options.present?.(this.#record, this.#record?.view.section ?? "experience", screen === "work");
+    // Keep keyboard focus inside the picker when navigation removes its button.
+    if (this.#body.contains(document.activeElement)) this.#body.focus({ preventScroll: true });
+    this.root.dataset.screen = screen;
     this.#body.replaceChildren();
     if (screen === "work") { this.renderWork(); this.#scrollRoot.scrollTop = this.#workScroll; }
     else if (screen === "categories") {
@@ -162,22 +167,26 @@ export class ExperimentPane {
       card.append(title, this.paragraph(new Date(record.savedAt).toLocaleString(this.options.locale)), open, remove); this.#body.append(card);
     }
   }
-  private renderTemplates(category: CategoryId, records: ExperimentSet[]): void {
-    const templates = templateDefinitions.filter(entry => entry.categories.includes(category));
+  private renderTemplates(category: CategoryId | "featured", records: ExperimentSet[]): void {
+    const templates = category === "featured"
+      ? templateDefinitions.filter(entry => entry.featured).sort((a, b) => Number(b.id === "button-led") - Number(a.id === "button-led"))
+      : templateDefinitions.filter(entry => entry.categories.includes(category));
     if (!templates.length) this.#body.append(this.paragraph(this.text("この分野の実験は準備中です。", "Experiments in this category are in preparation.")));
     for (const template of templates) {
       const card = document.createElement("article"); card.className = "experiment-card"; card.dataset.experimentTemplate = template.id;
-      const title = document.createElement("h3"); title.textContent = localized(template.title, this.options.locale);
-      card.append(title, this.paragraph(localized(template.description, this.options.locale)));
+      const title = document.createElement("h3"); const copy = category === "featured" ? template.featured! : template;
+      title.textContent = localized(copy.title, this.options.locale);
+      card.append(title, this.paragraph(localized(copy.description, this.options.locale)));
       const copies = records.filter(record => record.origin.kind === "template" && record.origin.id === template.id);
       if (copies[0]) {
         const open = this.button(this.text("保存したセットを開く", "Open saved set"), () => this.action(() => this.options.open(copies[0]!.id)));
         open.dataset.experimentWrite = ""; card.append(open);
       }
       const create = this.button(this.#running ? this.text("保存して切り替える（実行は停止）", "Save and switch (stops running code)")
-        : this.text(copies.length ? "新しく作る" : "新しい実験セットを作る", copies.length ? "Create another" : "Create experiment set"), () => this.action(() => this.options.create(template.id)));
+        : this.text(copies.length ? "新しく作る" : "この実験を開く", copies.length ? "Create another" : "Open this experiment"), () => this.action(() => this.options.create(template.id)));
       create.dataset.experimentWrite = ""; create.dataset.createExperiment = template.id; card.append(create); this.#body.append(card);
     }
+    if (category === "featured") this.#body.append(this.button(this.text("すべての実験を見る", "See all experiments"), () => this.show("categories"), "experiment-all-topics"));
   }
   private action(action: () => Promise<void>): void {
     void action().catch(error => this.status(error instanceof Error ? error.message : String(error), true));

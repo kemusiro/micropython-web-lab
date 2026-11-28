@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="ブラウザ内のWeb Workerで動作するMicroPythonコードエディタとREPL"
+      content="マイコンがなくても、コードを書いて、LED・音・ロボットの反応をブラウザーで確かめられます。"
       data-i18n-content="meta.description"
     />
     <title>MicroPython Web Lab</title>
@@ -20,7 +20,7 @@
             <span class="alpha-badge" data-i18n="alpha.badge">公開α</span>
           </div>
           <p class="lede" data-i18n="hero.description">
-            MicroPythonのコードをブラウザ内の専用Workerで編集・実行できる実験環境です。
+            マイコンがなくても、コードを書いて、LED・音・ロボットの反応をブラウザーで確かめられます。
           </p>
           <p class="alpha-note" data-i18n="alpha.notice">
             技術評価中です。画面・機能・ブラウザ保存形式は変更される可能性があります。大切なコードは別の場所にも保存してください。
@@ -50,15 +50,35 @@
       </aside>
 
       <nav class="screen-navigation" aria-label="画面の切り替え" data-i18n-aria-label="experiment.navigation">
-        <button id="open-experiment-button" type="button" class="quiet" data-i18n="experiment.open">はじめの実験</button>
-        <button id="open-workspace-button" type="button" class="quiet" data-i18n="experiment.workspace">ワークスペースを開く</button>
+        <button id="open-experiment-button" type="button" class="quiet entry-led">
+          <strong data-i18n="entry.led">LEDを点滅させる</strong>
+          <span class="entry-hint" data-i18n="entry.ledHint">「実行」→ 数字を変える → 違いを見る。</span>
+        </button>
+        <button id="choose-experiment-button" type="button" class="quiet" aria-haspopup="dialog" aria-controls="experiment-picker">
+          <strong data-i18n="entry.choose">実験を選ぶ</strong>
+          <span class="entry-hint" data-i18n="entry.chooseHint">ボタン・ロボット・音の実験を見てみる。</span>
+        </button>
+        <button id="open-workspace-button" type="button" class="quiet">
+          <strong data-i18n="entry.continue">作業を続ける</strong>
+          <span id="continue-work-name" class="entry-work-name"></span>
+          <span class="entry-hint" data-i18n="entry.continueHint">自由に書くなら、ワークスペースへ。</span>
+        </button>
       </nav>
+
+      <dialog id="experiment-picker" class="experiment-picker" aria-labelledby="experiment-picker-title">
+        <div class="experiment-picker-heading">
+          <h2 id="experiment-picker-title" data-i18n="entry.choose">実験を選ぶ</h2>
+          <button id="close-experiment-picker" type="button" class="quiet" data-i18n="entry.close">閉じる</button>
+        </div>
+        <p class="experiment-picker-hint" data-i18n="entry.browseHint">見るだけでは作業は切り替わりません。実験を開いてから「実行」で始めます。</p>
+        <div id="experiment-picker-content"></div>
+      </dialog>
 
       <section id="workspace" class="workspace" aria-label="MicroPython REPL">
         <section id="experiment-guide" class="experiment-guide" aria-labelledby="experiment-title">
           <p id="experiment-step" class="eyebrow" data-i18n="experiment.stepRun">1 / 2 · 実行してみる</p>
           <h2 id="experiment-title" data-i18n="experiment.titleRun">LEDを点滅させてみよう</h2>
-          <p id="experiment-instruction" data-i18n="experiment.instructionRun">「実行」を押すと、内蔵LEDが3回点滅します。配線の準備は必要ありません。</p>
+          <p id="experiment-instruction" data-i18n="experiment.instructionRun">「実行」で内蔵LEDが3回点滅します。配線は不要です。</p>
         </section>
         <div id="workspace-toolbar" class="toolbar">
           <div class="toolbar-group">

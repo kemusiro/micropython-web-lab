@@ -11,9 +11,20 @@ Raspberry Pi is a trademark of Raspberry Pi Ltd.
 
 ## First use
 
-Browsers without saved code open the First experiment screen. Press Run to blink the built-in LED,
-then change 500 to 200 in `interval_ms = 500` and run it again. Open workspace to use the device list,
-wiring editor, debugger, and REPL. Stop, error output, and restart remain available in the simple screen. Press Esc, then Tab to leave the editor.
+Write code and see LEDs, sound and robots respond in your browser. No microcontroller is needed.
+There are three ways to start:
+
+- **Blink an LED**: the first visit already has the LED code open. Press Run, then change 500 to 200
+  in `interval_ms = 500` and run again to see the difference.
+- **Choose an experiment**: preview a button-controlled LED, an arm with a variable load, or a YM2203
+  ensemble. See all experiments leads to the existing categories and catalog. Browsing does not
+  create, switch or execute experiments. Close or press Esc to return to your work.
+- **Continue working**: shows the name of the work in this browser and opens its workspace, keeping
+  your code and wiring. This is also the way to write your own code on a first visit. Returning
+  visits restore saved work and the last screen as before.
+
+Use the workspace for the device list, wiring editor, debugger and REPL. Stop, error output, and
+restart remain available in the simple screen. Press Esc, then Tab to leave the editor.
 
 Choose Try a button to continue in a focused experiment showing only the push button. Press Run at
 the top; the starter sample reads the button for eight seconds. Press and release it repeatedly to
@@ -22,7 +33,7 @@ The output has a fixed height from the moment it appears and scrolls to the late
 Completion requires a press followed by a release during a successful execution. Press Run to try
 again. LED and button exercises are independent experiment sets. Opening one for the first time
 creates a copy of its code and wiring; reopening it uses your edited copy. The button set uses GP15.
-Unavailable synchronous input is explained on screen. Open workspace to use the current set's devices,
+Unavailable synchronous input is explained on screen. Continue working opens the current set's devices,
 files and REPL.
 
 View changes and browsing topics within the same set preserve Python execution. Opening another set

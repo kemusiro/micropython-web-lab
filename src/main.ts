@@ -158,6 +158,12 @@ const localDeviceBanner = requiredElement<HTMLElement>("local-device-banner");
 const localDeviceName = requiredElement<HTMLSpanElement>("local-device-name");
 const openExperimentButton = requiredElement<HTMLButtonElement>("open-experiment-button");
 const openWorkspaceButton = requiredElement<HTMLButtonElement>("open-workspace-button");
+const chooseExperimentButton = requiredElement<HTMLButtonElement>("choose-experiment-button");
+const experimentPicker = requiredElement<HTMLDialogElement>("experiment-picker");
+const experimentPaneRoot = requiredElement<HTMLElement>("experiment-pane");
+// Restore the shared catalog to its original place after browsing from the entrance.
+const experimentPaneAnchor = document.createComment("experiment pane home");
+experimentPaneRoot.before(experimentPaneAnchor);
 const experimentStopButton = requiredElement<HTMLButtonElement>("experiment-stop-button");
 const experimentRestartButton = requiredElement<HTMLButtonElement>("experiment-restart-button");
 const experimentStep = requiredElement<HTMLParagraphElement>("experiment-step");
@@ -420,6 +426,7 @@ if (managedExperiments) {
       if (!experimentCoordinator || experimentReadOnly) throw new Error(t("draft.unavailable"));
       await experimentCoordinator.rename(title);
       experimentPane!.update(experimentCoordinator.current);
+      renderContinueWork();
     },
     remove: async record => {
       if (window.confirm(uiLocale === "ja" ? `「${record.title}」を削除しますか？` : `Delete “${record.title}”?`)) await experimentStore!.remove(record.id, record.revision);
@@ -541,8 +548,23 @@ appScreen = loadAppScreen(browserStorage, {
 if (!__WEB_LAB_LOCAL_MODE__) saveAppScreen(browserStorage, appScreen);
 renderAppScreen();
 openWorkspaceButton.addEventListener("click", () => showAppScreen("workspace"));
+chooseExperimentButton.hidden = !managedExperiments;
+chooseExperimentButton.addEventListener("click", () => {
+  if (!experimentPane) return;
+  requiredElement<HTMLElement>("experiment-picker-content").append(experimentPaneRoot);
+  experimentPane.show("featured");
+  experimentPicker.showModal();
+});
+requiredElement<HTMLButtonElement>("close-experiment-picker").addEventListener("click", () => experimentPicker.close());
+experimentPicker.addEventListener("close", () => {
+  if (!experimentPicker.open) restoreExperimentPane();
+});
 openExperimentButton.addEventListener("click", () => {
   if (codeEditor.readOnly) return;
+  if (appScreen === "experiment" && experimentTopic === "led") {
+    runScriptButton.focus();
+    return;
+  }
   if (experimentCoordinator) { void openManagedTemplate("led-blink", true).catch(projectError); return; }
   if (editorTabs.some((tab) => tab.id === experimentTabId)) {
     selectEditorTab(experimentTabId!);
@@ -1058,6 +1080,10 @@ function runCurrentScript(mode: ScriptExecutionMode): void {
 }
 
 function showAppScreen(screen: AppScreen): void {
+  if (experimentPicker.open) {
+    experimentPicker.close();
+    restoreExperimentPane();
+  }
   showDeviceConfiguration(false);
   appScreen = screen;
   saveAppScreen(browserStorage, screen);
@@ -1067,15 +1093,28 @@ function showAppScreen(screen: AppScreen): void {
   (screen === "experiment" ? experimentTopic === "button" ? runScriptButton : codeEditor : restartButton).focus({ preventScroll: true });
 }
 
+function restoreExperimentPane(): void {
+  // close events are queued; a completed switch may already have restored it.
+  if (experimentPaneRoot.parentElement?.id !== "experiment-picker-content") return;
+  experimentPaneAnchor.after(experimentPaneRoot);
+  experimentPane?.show("work");
+}
+
+function renderContinueWork(): void {
+  const record = experimentCoordinator?.current;
+  requiredElement<HTMLElement>("continue-work-name").textContent = record ? t("entry.currentWork", { name: record.title }) : "";
+}
+
 function renderAppScreen(): void {
   document.body.dataset.appScreen = appScreen;
   document.body.dataset.experimentTopic = experimentTopic;
   // Keep the shared Run/Stop controls above the button and its live output.
   const buttonScreen = appScreen === "experiment" && experimentTopic === "button";
   (buttonScreen ? experimentGuide : scriptForm).append(editorActions);
-  openExperimentButton.hidden = appScreen === "experiment" || __WEB_LAB_LOCAL_MODE__;
+  openExperimentButton.hidden = __WEB_LAB_LOCAL_MODE__;
   openWorkspaceButton.hidden = appScreen === "workspace";
   runScriptButton.textContent = t(appScreen === "experiment" ? "experiment.run" : "editor.run");
+  renderContinueWork();
   renderExperiment();
 }
 

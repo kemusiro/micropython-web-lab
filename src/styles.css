@@ -1598,7 +1598,7 @@ footer { margin-top: 1.5rem; color: #68756e; font-size: 0.78rem; }
 .experiment-next[hidden], #experiment-output-details[hidden] { display: none; }
 
 body[data-app-screen="workspace"] :is(.experiment-guide, .experiment-preview, .experiment-result, .experiment-control) { display: none; }
-body[data-app-screen="experiment"] :is(.product-eyebrow, .lede, #runtime-version, .examples, [data-private-optional-content]) { display: none; }
+body[data-app-screen="experiment"] :is(.product-eyebrow, #runtime-version, .examples, [data-private-optional-content]) { display: none; }
 body[data-app-screen="experiment"] .workspace > :is(.toolbar, .workspace-resizer, .virtual-board-panel, .terminal-heading, .terminal-shell, .debugger-command-form, .repl-batch, .workspace-explorer, .device-configuration-screen) { display: none; }
 body[data-app-screen="experiment"] .editor-panel :is(.panel-heading .eyebrow, .panel-heading > span, .editor-tabs, .draft-actions, .editor-actions > span, #debug-script-button) { display: none; }
 
@@ -1898,4 +1898,65 @@ body[data-app-screen="experiment"][data-experiment-topic="button"] #experiment-o
     grid-template-rows: auto auto auto auto;
   }
   body[data-app-screen="experiment"][data-experiment-topic="button"] .virtual-board-panel { padding: .5rem 1rem; }
+}
+
+/* Keep the first LED run ready while exposing the other two entrances. */
+.screen-navigation { gap: .65rem; }
+.screen-navigation > button { text-align: left; overflow-wrap: anywhere; }
+.screen-navigation strong { font-size: .9rem; }
+.entry-hint, .entry-work-name { display: block; font-size: .75rem; line-height: 1.5; margin-top: .25rem; }
+.entry-work-name:empty { display: none; }
+body[data-app-screen="experiment"] .screen-navigation {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 1fr));
+}
+body[data-app-screen="experiment"] .screen-navigation > button { background: #fff; border-color: #bccbc0; }
+body[data-app-screen="experiment"] .screen-navigation > .entry-led { background: #e5b84f; border-color: #b98526; color: #18221c; }
+body[data-app-screen="experiment"] .screen-navigation > button:hover:not(:disabled) { color: #17201c; background: #e4ece6; }
+body[data-app-screen="experiment"] .screen-navigation > .entry-led:hover:not(:disabled) { background: #f2ca72; }
+body[data-app-screen="experiment"] .lede { max-width: 43rem; font-size: .9rem; line-height: 1.6; }
+body[data-app-screen="workspace"] .screen-navigation .entry-hint { display: none; }
+.experiment-picker {
+  width: min(48rem, calc(100vw - 1.5rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.25rem;
+  border: 1px solid #52675b;
+  border-radius: .85rem;
+  color: #d7e1da;
+  background: #1d2a22;
+}
+.experiment-picker::backdrop { background: rgb(0 0 0 / 55%); }
+.experiment-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.experiment-picker-heading h2 { font-size: 1.2rem; }
+.experiment-picker-hint { margin: .75rem 0; line-height: 1.6; font-size: .85rem; }
+.experiment-picker .experiment-card { margin-top: .75rem; }
+.experiment-picker :is(#experiment-return, #experiment-set-name, #experiment-emergency-backup),
+.experiment-picker [data-screen="featured"] .experiment-navigation,
+#experiment-featured { display: none; }
+.experiment-picker #experiment-featured { display: inline-block; }
+#experiment-all-topics { margin-top: .75rem; }
+@media (max-width: 600px) {
+  body[data-app-screen="experiment"] .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .5rem;
+  }
+  body[data-app-screen="experiment"] .hero > div:first-child { display: contents; }
+  body[data-app-screen="experiment"] .product-title { grid-column: 1; grid-row: 1; }
+  body[data-app-screen="experiment"] .hero-actions { grid-column: 2; grid-row: 1; align-self: start; }
+  body[data-app-screen="experiment"] .hero :is(.lede, .alpha-note) { grid-column: 1 / -1; margin: 0; }
+  body[data-app-screen="experiment"] .screen-navigation { grid-template-columns: minmax(0, 1fr); gap: .4rem; }
+  .screen-navigation > button { padding: .45rem .75rem; }
+  body[data-app-screen="experiment"][data-experiment-topic="led"] .experiment-guide { padding: .75rem 1rem .25rem; }
+  body[data-app-screen="experiment"][data-experiment-topic="led"] .experiment-guide h2 { margin-bottom: .5rem; }
+  body[data-app-screen="experiment"][data-experiment-topic="led"] .experiment-preview { padding-block: .5rem; }
+  body[data-app-screen="experiment"][data-experiment-topic="led"] .editor-panel {
+    grid-template-areas: "heading actions" "code code" "draft draft";
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto;
+  }
+  .entry-hint, .entry-work-name { margin-top: .1rem; }
+  .experiment-picker { padding: .85rem; }
 }

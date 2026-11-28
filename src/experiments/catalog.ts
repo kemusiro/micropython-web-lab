@@ -22,8 +22,11 @@ export const categoryDefinitions: readonly { id: CategoryId; title: Copy; descri
   { id: "learn", title: ["プログラミングを学ぶ", "Learn programming"], description: ["入力・処理・出力の関係を見る", "Observe input, processing and output"] },
   { id: "books", title: ["書籍から学ぶ", "Learn with books"], description: ["書籍連動の教材は準備中", "Book companion material is in preparation"] },
 ];
-export const templateDefinitions: readonly { id: TemplateId; categories: readonly CategoryId[]; title: Copy; description: Copy; lesson: Copy }[] = [
-  { id: "one-axis-arm", categories: ["physical", "learn"], title: ["重り付き一軸アーム", "One-axis arm with a load"],
+export const templateDefinitions: readonly { id: TemplateId; categories: readonly CategoryId[]; title: Copy; description: Copy; lesson: Copy; featured?: { title: Copy; description: Copy } }[] = [
+  { id: "one-axis-arm", featured: {
+    title: ["重りを変えてアームの動きを比べる", "Change the load and compare arm motion"],
+    description: ["重りを変えて実行し、アームの動きとグラフを見比べます。", "Change the load, run the code and compare the arm’s motion and plots."],
+  }, categories: ["physical", "learn"], title: ["重り付き一軸アーム", "One-axis arm with a load"],
     description: ["制御コード、重り、目標角度を用意。動作とグラフで重力や行き過ぎを観察します。", "Includes a controller, load and target. Observe gravity and overshoot in motion and plots."],
     lesson: ["要求トルクを10 msごとに与えます。重り・減衰・重力補償を変えて再実行し、行き過ぎと最後の偏差を比べます。", "Apply torque every 10 ms. Rerun with a different load, damping or gravity compensation; compare overshoot and final error."] },
   { id: "led-blink", categories: ["devices", "learn"], title: ["LEDを点滅させる", "Blink an LED"],
@@ -32,13 +35,19 @@ export const templateDefinitions: readonly { id: TemplateId; categories: readonl
   { id: "button-input", categories: ["devices", "learn"], title: ["ボタンの入力を読む", "Read a button"],
     description: ["GP15のボタンとmain.pyを用意。8秒間の押下・解放を出力します。", "Includes a GP15 button and main.py. Reports presses and releases for eight seconds."],
     lesson: ["実行してからボタンを押す・離す操作を試します。プルアップ入力は解放時1、押下時0です。", "Run, then press and release the button. A pulled-up input is 1 when released and 0 when pressed."] },
-  { id: "button-led", categories: ["devices", "learn"], title: ["ボタンでLEDを点ける", "Control an LED with a button"],
+  { id: "button-led", featured: {
+    title: ["ボタンでLEDを点ける", "Control an LED with a button"],
+    description: ["実行してボタンを押す・離すと、LEDが点いたり消えたりします。", "Run, then press and release the button to turn the LED on and off."],
+  }, categories: ["devices", "learn"], title: ["ボタンでLEDを点ける", "Control an LED with a button"],
     description: ["LED、GP15のボタン、main.pyを用意。6秒間、入力と点灯を見比べます。", "Includes an LED, GP15 button and main.py. Compare input and output for six seconds."],
     lesson: ["実行中にボタンを押すとLEDが点きます。led.value(1 - button.value())が入力を反転します。通常終了時はfinallyで消灯します。強制停止では実行環境を初期化します。", "Press the button during execution to light the LED. led.value(1 - button.value()) inverts the input. finally turns it off on normal completion; a forced stop resets the runtime."] },
   { id: "device-lab", categories: ["devices"], title: ["自由なデバイス実験", "Device workspace"],
     description: ["既定のデバイス一式とLEDサンプルを用意。配線や各デバイスの作例を試せます。", "Includes the default devices and LED sample. Explore wiring and device examples."],
     lesson: ["構成・配線から接続を編集できます。各カードのサンプルは、このセット内の無題タブとして開きます。", "Edit connections under Devices and wiring. Card examples open as untitled tabs inside this set."] },
-  { id: "ym2203", categories: ["sound", "devices"], title: ["YM2203の合奏", "YM2203 ensemble"],
+  { id: "ym2203", featured: {
+    title: ["YM2203で合奏する", "Play an ensemble with YM2203"],
+    description: ["ミュートを解除して実行。コードの音符を変えて、合奏を聴き比べます。", "Unmute and run. Change notes in the code and listen to the ensemble."],
+  }, categories: ["sound", "devices"], title: ["YM2203の合奏", "YM2203 ensemble"],
     description: ["音源、合奏コード、必要なライブラリを用意。ミュートを解除して実行します。", "Includes the sound module, ensemble code and libraries. Unmute, then run."],
     lesson: ["スピーカーは最初ミュートです。ミュートを解除して実行します。波形と音色編集は既存の音源カードから使えます。セット切替では予約音声を破棄します。", "The speaker starts muted. Unmute and run. Use the sound card for the waveform and patch editor. Switching sets discards scheduled audio."] },
 ];

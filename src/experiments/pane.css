@@ -12,6 +12,6 @@
 .experiment-management form { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-block: 0.6rem; }
 .experiment-management input { width: 100%; min-width: 0; }
 .experiment-pane button:focus-visible, .experiment-pane input:focus-visible { outline: 2px solid #f2ca72; outline-offset: 3px; }
-body[data-app-screen="experiment"] #experiment-pane { display: none; }
+body[data-app-screen="experiment"] .virtual-board-panel #experiment-pane { display: none; }
 @media (max-width: 959px) { .experiment-navigation button { flex: 1 1 7rem; } }
 @media (forced-colors: active) { .experiment-card, .experiment-pane { border-color: CanvasText; } }
