@@ -1959,4 +1959,10 @@ body[data-app-screen="workspace"] .screen-navigation .entry-hint { display: none
   }
   .entry-hint, .entry-work-name { margin-top: .1rem; }
   .experiment-picker { padding: .85rem; }
+  /* Leave room for localized labels across system fonts on narrow cards. */
+  .experiment-picker .experiment-card button {
+    width: 100%;
+    margin-inline: 0;
+    padding-inline: .5rem;
+  }
 }
