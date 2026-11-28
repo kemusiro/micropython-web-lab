@@ -1,12 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readDeploymentAuthorization, verifyDeployment } from "./lib/verify-deployment.mjs";
 import { SECURITY_HEADERS } from "../config/security-headers.mjs";
 import { createHtaccess, deploymentUrl, verifyResponse } from "./lib/sakura-deployment.mjs";
+
+test("host root redirect is separate from the application and requires an exact host and root path", async () => {
+  const config = await readFile(new URL("../deploy/sakura/root-redirect.htaccess.example", import.meta.url), "utf8");
+  const hostCondition = /^RewriteCond %\{HTTP_HOST\} (\S+) \[NC\]$/m.exec(config);
+  const pathCondition = /^RewriteCond %\{REQUEST_URI\} (\S+)$/m.exec(config);
+  assert(hostCondition && pathCondition, "Both host and path guards are required");
+  const host = new RegExp(hostCondition[1], "i");
+  const path = new RegExp(pathCondition[1]);
+  for (const value of ["web-lab.example.com", "WEB-LAB.EXAMPLE.COM", "web-lab.example.com:443"]) {
+    assert(host.test(value), value);
+  }
+  for (const value of ["other.example.com", "web-lab.example.com.evil", "evilweb-lab.example.com",
+    "web-labXexampleXcom", "web-lab.example.com:8443"]) {
+    assert(!host.test(value), value);
+  }
+  assert(path.test("/"));
+  for (const value of ["/lab/", "/lab/index.html", "/lab/assets/app.js", "/other", "//"]) {
+    assert(!path.test(value), value);
+  }
+  const rule = /^RewriteRule (\S+) (\S+) \[([^\]]+)\]$/m.exec(config);
+  assert(rule);
+  assert(new RegExp(rule[1]).test(""));
+  assert(!new RegExp(rule[1]).test("lab/"));
+  assert.equal(rule[2], "https://web-lab.example.com/lab/");
+  assert.equal(rule[3], "R=301,L");
+  assert(!createHtaccess().includes("Rewrite"));
+});
 
 test("Apache configuration preserves every production header without silent fallback", () => {
   const config = createHtaccess();

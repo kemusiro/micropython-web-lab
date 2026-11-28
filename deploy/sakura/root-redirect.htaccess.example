@@ -1,0 +1,7 @@
+# Append to the host document root's existing .htaccess, outside lab/.
+# Replace BOTH example hostnames; escape dots in the RewriteCond pattern.
+# Keep existing access controls and the control panel's HTTPS forwarding.
+RewriteEngine On
+RewriteCond %{HTTP_HOST} ^web-lab\.example\.com(?::443)?$ [NC]
+RewriteCond %{REQUEST_URI} ^/$
+RewriteRule ^$ https://web-lab.example.com/lab/ [R=301,L]
